@@ -66,8 +66,12 @@ class BenchmarkConfig(BaseSettings):
     vad_stop_secs: float = 0.2
 
     # Benchmark settings
-    post_audio_silence_ms: int = 2000  # Silence after audio ends
-    transcription_timeout_secs: float = 10.0  # Max time to wait for transcription
+    max_silence_timeout_secs: float = (
+        10.0  # Max time to send silence while waiting for transcription
+    )
+    transcription_timeout_secs: float = (
+        10.0  # Max time to wait for transcription after silence ends
+    )
 
     def ensure_dirs(self) -> None:
         """Create all required directories."""

@@ -34,7 +34,7 @@ class SyntheticInputTransport(BaseInputTransport):
     1. Streams all audio at real-time pace
     2. Silero VAD detects actual speech start/end in the audio content
     3. VADUserStartedSpeakingFrame/VADUserStoppedSpeakingFrame are emitted based on speech
-    4. After audio ends, sends silence for post_audio_silence_ms (keeps pipeline alive)
+    4. After audio ends, sends silence until transcription received (or timeout)
     """
 
     def __init__(
@@ -43,7 +43,8 @@ class SyntheticInputTransport(BaseInputTransport):
         sample_rate: int = 16000,
         chunk_ms: int = 20,
         vad_stop_secs: float = 0.2,
-        post_audio_silence_ms: int = 2000,
+        transcription_received: asyncio.Event | None = None,
+        max_silence_timeout: float = 10.0,
     ):
         """Initialize the synthetic input transport.
 
@@ -52,7 +53,10 @@ class SyntheticInputTransport(BaseInputTransport):
             sample_rate: Audio sample rate in Hz
             chunk_ms: Duration of each audio chunk in ms
             vad_stop_secs: Silence duration for VAD to trigger stop (default 0.2s)
-            post_audio_silence_ms: Silence to send after audio ends (default 2000ms)
+            transcription_received: Event set when transcription is received (optional).
+                If provided, silence is sent until this event is set or timeout.
+                If None, sends a fixed amount of silence for compatibility.
+            max_silence_timeout: Maximum time to send silence in seconds (default 10.0s)
         """
         # Create Silero VAD with configurable stop threshold
         vad_analyzer = SileroVADAnalyzer(params=VADParams(stop_secs=vad_stop_secs))
@@ -68,7 +72,8 @@ class SyntheticInputTransport(BaseInputTransport):
         self._sample_rate = sample_rate
         self._chunk_ms = chunk_ms
         self._vad_stop_secs = vad_stop_secs
-        self._post_audio_silence_ms = post_audio_silence_ms
+        self._transcription_received = transcription_received
+        self._max_silence_timeout = max_silence_timeout
 
         # Calculate chunk size in bytes (16-bit audio = 2 bytes per sample)
         samples_per_chunk = int(sample_rate * chunk_ms / 1000)
@@ -99,7 +104,8 @@ class SyntheticInputTransport(BaseInputTransport):
         sample_rate: int = 16000,
         chunk_ms: int = 20,
         vad_stop_secs: float = 0.2,
-        post_audio_silence_ms: int = 2000,
+        transcription_received: asyncio.Event | None = None,
+        max_silence_timeout: float = 10.0,
     ) -> "SyntheticInputTransport":
         """Create a transport from an audio file.
 
@@ -108,7 +114,8 @@ class SyntheticInputTransport(BaseInputTransport):
             sample_rate: Audio sample rate in Hz
             chunk_ms: Duration of each audio chunk in ms
             vad_stop_secs: Silence duration for VAD stop
-            post_audio_silence_ms: Silence after audio ends
+            transcription_received: Event set when transcription is received
+            max_silence_timeout: Maximum time to send silence in seconds
 
         Returns:
             SyntheticInputTransport instance
@@ -119,7 +126,8 @@ class SyntheticInputTransport(BaseInputTransport):
             sample_rate=sample_rate,
             chunk_ms=chunk_ms,
             vad_stop_secs=vad_stop_secs,
-            post_audio_silence_ms=post_audio_silence_ms,
+            transcription_received=transcription_received,
+            max_silence_timeout=max_silence_timeout,
         )
 
     async def start(self, frame: StartFrame):
@@ -242,11 +250,33 @@ class SyntheticInputTransport(BaseInputTransport):
                         user_stopped_sent = True
                         break
 
-            # Send brief additional silence for pipeline stability
-            for _ in range(5):  # 100ms at 20ms chunks
-                await self._send_silence_chunk(silence_data, sleep_time)
+            # Send silence until transcription received or timeout
+            if self._transcription_received is not None:
+                # Dynamic silence: keep sending until transcription arrives
+                silence_start = time.time()
+                silence_chunks_sent = 0
 
-            logger.debug("Silence phase complete")
+                while not self._transcription_received.is_set():
+                    elapsed = time.time() - silence_start
+                    if elapsed >= self._max_silence_timeout:
+                        logger.warning(
+                            f"Max silence timeout ({self._max_silence_timeout}s) reached "
+                            f"without transcription"
+                        )
+                        break
+                    await self._send_silence_chunk(silence_data, sleep_time)
+                    silence_chunks_sent += 1
+
+                silence_duration = silence_chunks_sent * self._chunk_ms / 1000
+                if self._transcription_received.is_set():
+                    logger.debug(f"Transcription received after {silence_duration:.2f}s of silence")
+                else:
+                    logger.debug(f"Silence phase ended after {silence_duration:.2f}s (timeout)")
+            else:
+                # Fallback: fixed silence for backwards compatibility
+                for _ in range(5):  # 100ms at 20ms chunks
+                    await self._send_silence_chunk(silence_data, sleep_time)
+                logger.debug("Silence phase complete (fixed 100ms)")
 
             # Wait for audio queue to drain
             logger.debug("Waiting for audio queue to drain...")

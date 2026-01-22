@@ -26,7 +26,7 @@ class BenchmarkRunner:
         sample_rate: int = 16000,
         chunk_ms: int = 20,
         vad_stop_secs: float = 0.2,
-        post_audio_silence_ms: int = 2000,
+        max_silence_timeout_secs: float = 10.0,
         transcription_timeout_secs: float = 10.0,
     ):
         """Initialize the benchmark runner.
@@ -35,14 +35,14 @@ class BenchmarkRunner:
             sample_rate: Audio sample rate in Hz.
             chunk_ms: Duration of each audio chunk in ms.
             vad_stop_secs: Silence duration for VAD stop.
-            post_audio_silence_ms: Silence after audio ends.
-            transcription_timeout_secs: Max time to wait for transcription.
+            max_silence_timeout_secs: Max time to send silence while waiting for transcription.
+            transcription_timeout_secs: Max time to wait for transcription after silence ends.
         """
         config = get_config()
         self.sample_rate = sample_rate or config.sample_rate
         self.chunk_ms = chunk_ms or config.chunk_duration_ms
         self.vad_stop_secs = vad_stop_secs or config.vad_stop_secs
-        self.post_audio_silence_ms = post_audio_silence_ms or config.post_audio_silence_ms
+        self.max_silence_timeout_secs = max_silence_timeout_secs or config.max_silence_timeout_secs
         self.transcription_timeout_secs = (
             transcription_timeout_secs or config.transcription_timeout_secs
         )
@@ -97,12 +97,15 @@ class BenchmarkRunner:
             )
 
             # Create transport with audio
+            # Pass transcription_received event so transport sends silence
+            # until transcription arrives (or timeout)
             transport = SyntheticInputTransport(
                 audio_data=audio_data,
                 sample_rate=self.sample_rate,
                 chunk_ms=self.chunk_ms,
                 vad_stop_secs=self.vad_stop_secs,
-                post_audio_silence_ms=self.post_audio_silence_ms,
+                transcription_received=transcription_observer._transcription_received,
+                max_silence_timeout=self.max_silence_timeout_secs,
             )
 
             # Build pipeline

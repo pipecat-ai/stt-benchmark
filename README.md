@@ -96,21 +96,21 @@ GOOGLE_APPLICATION_CREDENTIALS=/path/to/credentials.json  # Google Cloud STT
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ VADUserStartedSpeaking              Actual speech    VADUserStopped        │
-│        t=0                            ends           SpeakingFrame         │
-│         │                              │                  │                │
-│         ▼                              ▼                  ▼                │
-│  ═══════╪══════════════════════════════╪══════════════════╪════            │
-│         │      Audio streaming to STT  │   VAD stop_secs  │                │
-│         │                              │◄────────────────►│                │
-│         │                              │                  │                │
-│         │                              └──── TTFB ────────┼────────►       │
-│         │                           speech_end_time       │     T3         │
-│         │                                                 │  (final        │
-│         │     T1              T2                          │ transcript)    │
-│         │      │               │                          │                │
-│         │      ▼               ▼                          │                │
-│         │  transcript      transcript                     │                │
+│ VADUserStartedSpeaking              Actual speech    VADUserStopped         │
+│        t=0                            ends           SpeakingFrame          │
+│         │                              │                  │                 │
+│         ▼                              ▼                  ▼                 │
+│  ═══════╪══════════════════════════════╪══════════════════╪════             │
+│         │      Audio streaming to STT  │   VAD stop_secs  │                 │
+│         │                              │◄────────────────►│                 │
+│         │                              │                  │                 │
+│         │                              └──── TTFB ────────┼────────►        │
+│         │                           speech_end_time       │     T3          │
+│         │                                                 │  (final         │
+│         │     T1              T2                          │ transcript)     │
+│         │      │               │                          │                 │
+│         │      ▼               ▼                          │                 │
+│         │  transcript      transcript                     │                 │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 

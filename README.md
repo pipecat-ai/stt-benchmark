@@ -185,9 +185,6 @@ uv run stt-benchmark ground-truth
 
 # Interactive review with audio playback
 uv run stt-benchmark ground-truth review <run_id>
-
-# Edit a specific sample's ground truth
-uv run stt-benchmark ground-truth edit <sample_id> --text "corrected text"
 ```
 
 ### Calculating Semantic WER

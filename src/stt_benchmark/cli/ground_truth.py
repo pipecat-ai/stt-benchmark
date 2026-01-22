@@ -46,8 +46,8 @@ def generate_ground_truth(
 
     Subcommands:
       iterate  - Run a repeatable transcription iteration (saves to JSONL)
-      review   - Interactive review of transcription runs with audio playback
       list     - List available transcription runs
+      review   - Interactive review of transcription runs with audio playback
     """
     # If a subcommand was invoked, don't run the default behavior
     if ctx.invoked_subcommand is not None:
@@ -131,12 +131,6 @@ def iterate_command(
         "-n",
         help="Number of samples to transcribe",
     ),
-    clear: bool = typer.Option(
-        False,
-        "--clear",
-        "-c",
-        help="Clear existing ground truths before running",
-    ),
 ):
     """Run a repeatable transcription iteration.
 
@@ -153,7 +147,6 @@ def iterate_command(
 
     console.print("\n[bold blue]STT Benchmark - Ground Truth Iteration[/bold blue]\n")
     console.print(f"Samples: {samples}")
-    console.print(f"Clear existing: {clear}")
 
     async def run():
         from stt_benchmark.ground_truth.run_iteration import run_iteration
@@ -172,7 +165,6 @@ def iterate_command(
 
             output_path = await run_iteration(
                 num_samples=samples,
-                clear_existing=clear,
                 progress_callback=callback,
             )
 
@@ -233,14 +225,13 @@ def review_command(
 ):
     """Interactive review of transcription runs with audio playback.
 
-    Listen to audio samples and approve/note/edit transcriptions.
+    Listen to audio samples and approve/note transcriptions.
     Requires ffplay (from ffmpeg) for audio playback.
 
     Controls:
       [p] Play audio
       [r] Replay audio
       [a] Approve transcription
-      [e] Edit transcription (saves correction to database)
       [n] Add note (flag for review)
       [Enter] Skip to next
       [q] Quit
@@ -265,77 +256,3 @@ def review_command(
 
     # Run the interactive evaluation
     run_evaluation(run_path)
-
-
-@app.command("edit")
-def edit_command(
-    sample_id: str = typer.Argument(
-        ...,
-        help="Sample ID to edit (e.g., 'sample_0001')",
-    ),
-    text: str | None = typer.Option(
-        None,
-        "--text",
-        "-t",
-        help="New transcription text. If not provided, opens interactive editor.",
-    ),
-):
-    """Manually edit ground truth for a specific sample.
-
-    Use this to correct transcription errors without going through
-    the full review workflow.
-
-    Examples:
-      stt-benchmark ground-truth edit sample_0001 --text "corrected text here"
-      stt-benchmark ground-truth edit sample_0001  # interactive
-    """
-    from datetime import datetime, timezone
-
-    from stt_benchmark.models import GroundTruth
-    from stt_benchmark.storage.database import Database
-
-    async def run():
-        db = Database()
-        await db.initialize()
-
-        # Check if sample exists
-        sample = await db.get_sample(sample_id)
-        if not sample:
-            console.print(f"[red]Sample not found: {sample_id}[/red]")
-            return
-
-        # Get current ground truth
-        current_gt = await db.get_ground_truth(sample_id)
-
-        if current_gt:
-            console.print("\n[bold]Current ground truth:[/bold]")
-            console.print(f'"{current_gt.text}"')
-            console.print(f"[dim]Model: {current_gt.model_used}[/dim]\n")
-        else:
-            console.print(f"\n[yellow]No ground truth exists for {sample_id}[/yellow]\n")
-
-        # Get new text
-        if text:
-            new_text = text
-        else:
-            console.print("Enter new transcription (or press Enter to cancel):")
-            new_text = input("> ").strip()
-
-        if not new_text:
-            console.print("[yellow]Cancelled[/yellow]")
-            return
-
-        # Save to database
-        gt = GroundTruth(
-            sample_id=sample_id,
-            text=new_text,
-            model_used="human_corrected",
-            generated_at=datetime.now(timezone.utc),
-        )
-        await db.insert_ground_truth(gt)
-        await db.close()
-
-        console.print(f"\n[green]✓ Updated ground truth for {sample_id}[/green]")
-        console.print(f'New text: "{new_text[:60]}{"..." if len(new_text) > 60 else ""}"')
-
-    asyncio.run(run())

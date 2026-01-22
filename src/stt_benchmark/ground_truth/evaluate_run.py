@@ -95,7 +95,7 @@ def display_sample(
         print()
 
     print("-" * 70)
-    print("[p] Play  [r] Replay  [a] Approve  [e] Edit  [n] Note  [Enter] Next  [q] Quit")
+    print("[p] Play  [r] Replay  [a] Approve   [n] Note  [Enter] Next  [q] Quit")
     print("-" * 70)
     print(
         f"Progress: {stats['approved']} approved, {stats['noted']} noted, {stats['skipped']} skipped"
@@ -190,54 +190,6 @@ def run_evaluation(run_path: Path):
                     stats["approved"] += 1
                     i += 1
                     break
-
-                elif key == "e":
-                    # Edit transcription
-                    print("\n" + "=" * 70)
-                    print("EDIT TRANSCRIPTION")
-                    print("=" * 70)
-                    print(f"Current: {sample.get('transcription', '')}")
-                    print("\nEnter corrected transcription (or press Enter to cancel):")
-                    edited_text = input("> ").strip()
-
-                    if edited_text:
-                        # Save to database
-                        import asyncio
-
-                        from stt_benchmark.models import GroundTruth
-                        from stt_benchmark.storage.database import Database
-
-                        async def save_correction(sid: str, text: str):
-                            db = Database()
-                            await db.initialize()
-                            gt = GroundTruth(
-                                sample_id=sid,
-                                text=text,
-                                model_used="human_corrected",
-                                generated_at=datetime.now(timezone.utc),
-                            )
-                            await db.insert_ground_truth(gt)
-                            await db.close()
-
-                        asyncio.run(save_correction(sample_id, edited_text))
-
-                        # Update local sample for display
-                        sample["transcription"] = edited_text
-
-                        # Save review with the correction
-                        save_review(
-                            notes_path, sample_id, "corrected", f"Changed to: {edited_text[:50]}..."
-                        )
-                        existing_notes[sample_id] = {"status": "corrected", "note": edited_text}
-                        stats["approved"] += 1
-                        print("\n✓ Saved correction to database")
-                        input("Press Enter to continue...")
-                        i += 1
-                        break
-                    else:
-                        print("Edit cancelled.")
-                        # Redisplay current sample
-                        continue
 
                 elif key == "n":
                     # Add note

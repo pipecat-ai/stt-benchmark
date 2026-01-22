@@ -5,7 +5,6 @@ for longitudinal comparison as we iterate on the prompt.
 
 Usage:
     uv run stt-benchmark ground-truth iterate --samples 100
-    uv run stt-benchmark ground-truth iterate --samples 100 --clear
 """
 
 import hashlib
@@ -55,14 +54,12 @@ async def get_first_n_samples(db: Database, n: int) -> list[AudioSample]:
 
 async def run_iteration(
     num_samples: int = 100,
-    clear_existing: bool = False,
     progress_callback: Callable | None = None,
 ) -> Path:
     """Run a transcription iteration and save to JSONL.
 
     Args:
         num_samples: Number of samples to transcribe
-        clear_existing: Whether to clear existing ground truths first
         progress_callback: Optional callback(current, total, sample_id)
 
     Returns:
@@ -71,11 +68,6 @@ async def run_iteration(
     config = get_config()
     db = Database()
     await db.initialize()
-
-    # Optionally clear existing ground truths
-    if clear_existing:
-        count = await db.clear_all_ground_truths()
-        logger.info(f"Cleared {count} existing ground truth records")
 
     # Get samples
     samples = await get_first_n_samples(db, num_samples)

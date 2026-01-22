@@ -125,7 +125,6 @@ uv run stt-benchmark ground-truth [OPTIONS] [SUBCOMMAND]
 | `iterate` | Run a repeatable transcription iteration (saves to JSONL) |
 | `list` | List available transcription runs |
 | `review` | Interactive review with audio playback |
-| `edit` | Manually edit ground truth for a sample |
 
 ### Examples
 
@@ -151,7 +150,6 @@ uv run stt-benchmark ground-truth iterate [OPTIONS]
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `--samples` | INT | 100 | Number of samples to transcribe |
-| `--clear` | BOOL | False | Clear existing ground truths first |
 
 ```bash
 # Run an iteration with 100 samples
@@ -192,7 +190,6 @@ uv run stt-benchmark ground-truth review <run_id>
 |-----|--------|
 | `p` / `r` | Play / Replay audio |
 | `a` | Approve transcription |
-| `e` | Edit transcription (saves to database) |
 | `n` | Add note (flag for review) |
 | `Enter` | Skip to next |
 | `q` | Quit |
@@ -200,26 +197,6 @@ uv run stt-benchmark ground-truth review <run_id>
 ```bash
 # Review a specific run
 uv run stt-benchmark ground-truth review 2026-01-20_14-30-00
-```
-
-### edit
-
-Directly edit ground truth for a specific sample.
-
-```bash
-uv run stt-benchmark ground-truth edit <sample_id> [OPTIONS]
-```
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `-t, --text` | TEXT | - | New transcription text (interactive if not provided) |
-
-```bash
-# Interactive edit
-uv run stt-benchmark ground-truth edit sample_0001
-
-# Direct edit
-uv run stt-benchmark ground-truth edit sample_0001 --text "corrected transcription"
 ```
 
 ---

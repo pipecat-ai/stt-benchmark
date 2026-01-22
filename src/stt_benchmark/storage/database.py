@@ -422,21 +422,6 @@ class Database:
         row = await cursor.fetchone()
         return row[0]
 
-    async def clear_all_ground_truths(self) -> int:
-        """Clear all ground truth entries.
-
-        Returns:
-            Number of entries deleted.
-        """
-        cursor = await self._conn.execute("SELECT COUNT(*) FROM ground_truth")
-        row = await cursor.fetchone()
-        count = row[0]
-
-        await self._conn.execute("DELETE FROM ground_truth")
-        await self._conn.commit()
-
-        return count
-
     # ========== WER Metrics Operations ==========
 
     async def insert_wer_metrics(self, metrics: WERMetrics) -> None:

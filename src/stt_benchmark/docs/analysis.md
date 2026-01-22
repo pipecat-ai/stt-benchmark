@@ -221,18 +221,9 @@ uv run stt-benchmark ground-truth review 2026-01-20_14-30-00
 |-----|--------|
 | `p` | Play audio |
 | `a` | Approve (transcription is correct) |
-| `e` | Edit (fix transcription, saves to database) |
 | `n` | Note (flag for later) |
 | `Enter` | Skip |
 | `q` | Quit |
-
-### Direct Edits
-
-If you know a specific sample needs correction:
-
-```bash
-uv run stt-benchmark ground-truth edit <sample_id> --text "corrected text"
-```
 
 ### After Corrections
 

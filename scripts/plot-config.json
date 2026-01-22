@@ -1,0 +1,28 @@
+{
+  "services": [
+    "assemblyai",
+    "aws",
+    "azure",
+    "cartesia",
+    "deepgram",
+    "elevenlabs",
+    "google",
+    "openai_realtime",
+    "soniox",
+    "speechmatics"
+  ],
+  "display_names": {
+    "assemblyai": "AssemblyAI",
+    "aws": "AWS",
+    "azure": "Azure",
+    "cartesia": "Cartesia",
+    "deepgram": "Deepgram",
+    "elevenlabs": "ElevenLabs",
+    "google": "Google",
+    "openai_realtime": "OpenAI",
+    "soniox": "Soniox",
+    "speechmatics": "Speechmatics"
+  },
+  "latency": ["median", "p95"],
+  "output": "assets/"
+}

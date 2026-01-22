@@ -768,10 +768,16 @@ class Database:
 
         ttfb_median = 0.0
         ttfb_p95 = 0.0
+        ttfb_p99 = 0.0
         if ttfb_values:
             ttfb_median = ttfb_values[len(ttfb_values) // 2]
             ttfb_p95 = (
                 ttfb_values[int(len(ttfb_values) * 0.95)]
+                if len(ttfb_values) > 1
+                else ttfb_values[0]
+            )
+            ttfb_p99 = (
+                ttfb_values[int(len(ttfb_values) * 0.99)]
                 if len(ttfb_values) > 1
                 else ttfb_values[0]
             )
@@ -781,9 +787,9 @@ class Database:
             "successful_transcripts": successful,
             "failed_transcripts": failed,
             "success_rate": successful / total if total > 0 else 0,
-            "ttfb_mean": row["ttfb_mean"] or 0,
             "ttfb_median": ttfb_median,
             "ttfb_p95": ttfb_p95,
+            "ttfb_p99": ttfb_p99,
         }
 
     async def get_services_with_results(self) -> list[tuple[ServiceName, str | None]]:
@@ -853,12 +859,14 @@ class Database:
         wer_values = [r["wer"] for r in rows]
         ttfb_values = [r["ttfb"] for r in rows if r["ttfb"] is not None]
 
-        # Calculate median
+        # Calculate WER median and P95
         n = len(wer_values)
         wer_median = wer_values[n // 2] if n > 0 else 0
+        wer_p95 = wer_values[int(n * 0.95)] if n > 1 else (wer_values[0] if n > 0 else 0)
 
         ttfb_median = 0
         ttfb_p95 = 0
+        ttfb_p99 = 0
         if ttfb_values:
             ttfb_sorted = sorted(ttfb_values)
             ttfb_median = ttfb_sorted[len(ttfb_sorted) // 2]
@@ -867,15 +875,21 @@ class Database:
                 if len(ttfb_sorted) > 1
                 else ttfb_sorted[0]
             )
+            ttfb_p99 = (
+                ttfb_sorted[int(len(ttfb_sorted) * 0.99)]
+                if len(ttfb_sorted) > 1
+                else ttfb_sorted[0]
+            )
 
         return {
             "sample_count": row["sample_count"],
             "wer_mean": row["wer_mean"] or 0,
             "wer_median": wer_median,
+            "wer_p95": wer_p95,
             "perfect_count": row["perfect_count"] or 0,
-            "ttfb_mean": row["ttfb_mean"] or 0,
             "ttfb_median": ttfb_median,
             "ttfb_p95": ttfb_p95,
+            "ttfb_p99": ttfb_p99,
         }
 
     async def get_report_data(

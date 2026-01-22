@@ -120,9 +120,10 @@ async def _show_all_services_summary():
         table.add_column("0% WER", justify="right")
         table.add_column("WER Mean", justify="right")
         table.add_column("WER Median", justify="right")
-    table.add_column("TTFB Mean", justify="right")
+        table.add_column("WER P95", justify="right")
     table.add_column("TTFB Median", justify="right")
     table.add_column("TTFB P95", justify="right")
+    table.add_column("TTFB P99", justify="right")
 
     summaries = []
     for service_name, model_name in services_with_results:
@@ -159,16 +160,17 @@ async def _show_all_services_summary():
                             perfect_str,
                             f"{wer_summary['wer_mean'] * 100:.1f}%",
                             f"{wer_summary['wer_median'] * 100:.1f}%",
+                            f"{wer_summary['wer_p95'] * 100:.1f}%",
                         ]
                     )
                 else:
-                    row_data.extend(["-", "-", "-"])
+                    row_data.extend(["-", "-", "-", "-"])
 
             row_data.extend(
                 [
-                    f"{transcript_stats['ttfb_mean'] * 1000:.0f}ms",
                     f"{transcript_stats['ttfb_median'] * 1000:.0f}ms",
                     f"{transcript_stats['ttfb_p95'] * 1000:.0f}ms",
+                    f"{transcript_stats['ttfb_p99'] * 1000:.0f}ms",
                 ]
             )
 
@@ -211,12 +213,12 @@ async def _show_all_services_summary():
                 console.print(f"  {medal} {name}: {wer_summary['wer_mean'] * 100:.1f}%")
 
         # TTFB rankings
-        console.print("\n[bold]Rankings (by mean TTFB):[/bold]")
-        ranked_ttfb = sorted(summaries, key=lambda x: x[2]["ttfb_mean"])
+        console.print("\n[bold]Rankings (by median TTFB):[/bold]")
+        ranked_ttfb = sorted(summaries, key=lambda x: x[2]["ttfb_median"])
         for i, (service, model, transcript_stats, _) in enumerate(ranked_ttfb, 1):
             medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
             name = f"{service.value}" + (f" ({model})" if model else "")
-            console.print(f"  {medal} {name}: {transcript_stats['ttfb_mean'] * 1000:.0f}ms")
+            console.print(f"  {medal} {name}: {transcript_stats['ttfb_median'] * 1000:.0f}ms")
 
         # Transcript rate rankings
         console.print("\n[bold]Rankings (by % transcribed):[/bold]")

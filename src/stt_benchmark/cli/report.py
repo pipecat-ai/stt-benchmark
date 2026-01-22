@@ -91,12 +91,14 @@ async def _show_all_services_summary():
     db = Database()
     await db.initialize()
 
-    # Get all services with WER metrics
-    services = await db.get_services_with_wer_metrics()
+    # Get all services with results (not just WER)
+    services_with_results = await db.get_services_with_results()
+    services_with_wer = await db.get_services_with_wer_metrics()
+    services_with_wer_set = set(services_with_wer)
 
-    if not services:
-        console.print("[yellow]No services have WER metrics yet.[/yellow]")
-        console.print("Run 'stt-benchmark wer' to calculate semantic WER metrics.")
+    if not services_with_results:
+        console.print("[yellow]No benchmark results found.[/yellow]")
+        console.print("Run 'stt-benchmark run --services <service>' first.")
         await db.close()
         return
 
@@ -107,52 +109,100 @@ async def _show_all_services_summary():
     console.print(f"Total samples: {sample_count}")
     console.print(f"Ground truth available: {gt_count}\n")
 
+    # Check if any services have WER
+    has_any_wer = len(services_with_wer) > 0
+
     # Build summary table
     table = Table(title="Service Comparison")
     table.add_column("Service", style="cyan", no_wrap=True)
-    table.add_column("Samples", justify="right")
-    table.add_column("WER Mean", justify="right")
-    table.add_column("WER Median", justify="right")
+    table.add_column("Transcripts", justify="right")
+    table.add_column("Success", justify="right")
+    if has_any_wer:
+        table.add_column("WER Mean", justify="right")
+        table.add_column("WER Median", justify="right")
     table.add_column("TTFB Mean", justify="right")
     table.add_column("TTFB Median", justify="right")
     table.add_column("TTFB P95", justify="right")
 
     summaries = []
-    for service_name, model_name in services:
-        summary = await db.get_service_summary(service_name, model_name)
-        if summary:
-            summaries.append((service_name, model_name, summary))
-            table.add_row(
-                service_name.value,
-                str(summary["sample_count"]),
-                f"{summary['wer_mean'] * 100:.1f}%",
-                f"{summary['wer_median'] * 100:.1f}%",
-                f"{summary['ttfb_mean'] * 1000:.0f}ms",
-                f"{summary['ttfb_median'] * 1000:.0f}ms",
-                f"{summary['ttfb_p95'] * 1000:.0f}ms",
+    for service_name, model_name in services_with_results:
+        transcript_stats = await db.get_service_transcript_stats(service_name, model_name)
+
+        # Get WER summary if available
+        wer_summary = None
+        if (service_name, model_name) in services_with_wer_set:
+            wer_summary = await db.get_service_summary(service_name, model_name)
+
+        if transcript_stats:
+            summaries.append((service_name, model_name, transcript_stats, wer_summary))
+
+            rate_str = f"{transcript_stats['success_rate'] * 100:.1f}%"
+            transcripts_str = (
+                f"{transcript_stats['successful_transcripts']}/{transcript_stats['total_runs']}"
             )
+
+            row_data = [
+                service_name.value,
+                transcripts_str,
+                rate_str,
+            ]
+
+            if has_any_wer:
+                if wer_summary:
+                    row_data.extend(
+                        [
+                            f"{wer_summary['wer_mean'] * 100:.1f}%",
+                            f"{wer_summary['wer_median'] * 100:.1f}%",
+                        ]
+                    )
+                else:
+                    row_data.extend(["-", "-"])
+
+            row_data.extend(
+                [
+                    f"{transcript_stats['ttfb_mean'] * 1000:.0f}ms",
+                    f"{transcript_stats['ttfb_median'] * 1000:.0f}ms",
+                    f"{transcript_stats['ttfb_p95'] * 1000:.0f}ms",
+                ]
+            )
+
+            table.add_row(*row_data)
 
     await db.close()
 
     console.print(table)
 
-    # Show rankings for both WER and TTFB
+    # Show rankings
     if summaries:
-        console.print("\n[bold]Rankings (by mean Semantic WER):[/bold]")
-        ranked_wer = sorted(summaries, key=lambda x: x[2]["wer_mean"])
-        for i, (service, model, summary) in enumerate(ranked_wer, 1):
-            medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
-            name = f"{service.value}" + (f" ({model})" if model else "")
-            console.print(f"  {medal} {name}: {summary['wer_mean'] * 100:.1f}%")
+        # WER rankings (only if we have WER data)
+        summaries_with_wer = [(s, m, ts, ws) for s, m, ts, ws in summaries if ws is not None]
+        if summaries_with_wer:
+            console.print("\n[bold]Rankings (by mean Semantic WER):[/bold]")
+            ranked_wer = sorted(summaries_with_wer, key=lambda x: x[3]["wer_mean"])
+            for i, (service, model, _, wer_summary) in enumerate(ranked_wer, 1):
+                medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
+                name = f"{service.value}" + (f" ({model})" if model else "")
+                console.print(f"  {medal} {name}: {wer_summary['wer_mean'] * 100:.1f}%")
 
+        # TTFB rankings
         console.print("\n[bold]Rankings (by mean TTFB):[/bold]")
         ranked_ttfb = sorted(summaries, key=lambda x: x[2]["ttfb_mean"])
-        for i, (service, model, summary) in enumerate(ranked_ttfb, 1):
+        for i, (service, model, transcript_stats, _) in enumerate(ranked_ttfb, 1):
             medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
             name = f"{service.value}" + (f" ({model})" if model else "")
-            console.print(f"  {medal} {name}: {summary['ttfb_mean'] * 1000:.0f}ms")
+            console.print(f"  {medal} {name}: {transcript_stats['ttfb_mean'] * 1000:.0f}ms")
 
-    console.print("\n[dim]Use --service <name> to generate detailed reports for a service.[/dim]")
+        # Transcript success rankings
+        console.print("\n[bold]Rankings (by transcript success):[/bold]")
+        ranked_rate = sorted(summaries, key=lambda x: x[2]["success_rate"], reverse=True)
+        for i, (service, model, transcript_stats, _) in enumerate(ranked_rate, 1):
+            medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
+            name = f"{service.value}" + (f" ({model})" if model else "")
+            console.print(f"  {medal} {name}: {transcript_stats['success_rate'] * 100:.1f}%")
+
+    if not services_with_wer:
+        console.print("\n[dim]Run 'stt-benchmark wer' to calculate semantic WER metrics.[/dim]")
+    console.print("[dim]Use --service <name> to generate detailed reports for a service.[/dim]")
 
 
 async def _show_worst_samples(service_name: ServiceName, model_name: str | None, limit: int):
@@ -224,6 +274,9 @@ async def _generate_detailed_report(
     console.print(f"Samples with WER: {wer_count}")
     console.print(f"Output directory: {output_path}\n")
 
+    # Get transcript success stats
+    transcript_stats = await db.get_service_transcript_stats(service_name, model_name)
+
     # Get all data for report
     report_data = await db.get_report_data(service_name, model_name)
 
@@ -277,6 +330,13 @@ async def _generate_detailed_report(
 
         f.write("--- OVERALL STATISTICS ---\n")
         f.write(f"Total samples: {len(report_data)}\n\n")
+
+        if transcript_stats:
+            f.write("Transcript Success:\n")
+            f.write(f"  Total runs: {transcript_stats['total_runs']}\n")
+            f.write(f"  Successful: {transcript_stats['successful_transcripts']}\n")
+            f.write(f"  Failed: {transcript_stats['failed_transcripts']}\n")
+            f.write(f"  Success: {transcript_stats['success_rate'] * 100:.1f}%\n\n")
 
         f.write("Semantic WER (Word Error Rate):\n")
         f.write(f"  Mean: {sum(wer_values) / len(wer_values) * 100:.2f}%\n")
@@ -373,6 +433,13 @@ async def _generate_detailed_report(
 
     table.add_row("Total Samples", str(len(report_data)))
     table.add_row("", "")  # Spacer
+    if transcript_stats:
+        table.add_row("[bold]Transcript Success[/bold]", "")
+        table.add_row("  Total Runs", str(transcript_stats["total_runs"]))
+        table.add_row("  Successful", str(transcript_stats["successful_transcripts"]))
+        table.add_row("  Failed", str(transcript_stats["failed_transcripts"]))
+        table.add_row("  Success", f"{transcript_stats['success_rate'] * 100:.1f}%")
+        table.add_row("", "")  # Spacer
     table.add_row("[bold]Semantic WER[/bold]", "")
     table.add_row("  Mean", f"{sum(wer_values) / len(wer_values) * 100:.2f}%")
     table.add_row("  Median", f"{median_wer * 100:.2f}%")

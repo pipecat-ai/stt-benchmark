@@ -723,6 +723,89 @@ class Database:
                 continue
         return result
 
+    async def get_service_transcript_stats(
+        self, service_name: ServiceName, model_name: str | None = None
+    ) -> dict | None:
+        """Get transcript success statistics for a service.
+
+        Returns a dict with total_runs, successful_transcripts, failed_transcripts, success_rate,
+        and TTFB stats (ttfb_mean, ttfb_median, ttfb_p95).
+        """
+        model_filter = model_name if model_name else ""
+        cursor = await self._conn.execute(
+            """
+            SELECT
+                COUNT(*) as total_runs,
+                SUM(CASE WHEN transcription IS NOT NULL AND transcription != '' THEN 1 ELSE 0 END) as successful,
+                SUM(CASE WHEN transcription IS NULL OR transcription = '' THEN 1 ELSE 0 END) as failed,
+                AVG(ttfb_seconds) as ttfb_mean
+            FROM results
+            WHERE service_name = ? AND model_name = ?
+            """,
+            (service_name.value, model_filter),
+        )
+        row = await cursor.fetchone()
+
+        if not row or row["total_runs"] == 0:
+            return None
+
+        total = row["total_runs"]
+        successful = row["successful"]
+        failed = row["failed"]
+
+        # Get TTFB percentiles
+        cursor = await self._conn.execute(
+            """
+            SELECT ttfb_seconds
+            FROM results
+            WHERE service_name = ? AND model_name = ? AND ttfb_seconds IS NOT NULL AND ttfb_seconds > 0
+            ORDER BY ttfb_seconds
+            """,
+            (service_name.value, model_filter),
+        )
+        ttfb_rows = await cursor.fetchall()
+        ttfb_values = [r["ttfb_seconds"] for r in ttfb_rows]
+
+        ttfb_median = 0.0
+        ttfb_p95 = 0.0
+        if ttfb_values:
+            ttfb_median = ttfb_values[len(ttfb_values) // 2]
+            ttfb_p95 = (
+                ttfb_values[int(len(ttfb_values) * 0.95)]
+                if len(ttfb_values) > 1
+                else ttfb_values[0]
+            )
+
+        return {
+            "total_runs": total,
+            "successful_transcripts": successful,
+            "failed_transcripts": failed,
+            "success_rate": successful / total if total > 0 else 0,
+            "ttfb_mean": row["ttfb_mean"] or 0,
+            "ttfb_median": ttfb_median,
+            "ttfb_p95": ttfb_p95,
+        }
+
+    async def get_services_with_results(self) -> list[tuple[ServiceName, str | None]]:
+        """Get all services that have benchmark results.
+
+        Returns a list of (service_name, model_name) tuples.
+        """
+        cursor = await self._conn.execute(
+            "SELECT DISTINCT service_name, model_name FROM results ORDER BY service_name"
+        )
+        rows = await cursor.fetchall()
+        result = []
+        for row in rows:
+            try:
+                service = ServiceName(row["service_name"])
+                model = row["model_name"] if row["model_name"] else None
+                result.append((service, model))
+            except ValueError:
+                # Skip unknown services
+                continue
+        return result
+
     async def get_service_summary(
         self, service_name: ServiceName, model_name: str | None = None
     ) -> dict | None:

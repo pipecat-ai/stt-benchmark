@@ -123,6 +123,7 @@ uv run stt-benchmark ground-truth [OPTIONS] [SUBCOMMAND]
 | Subcommand | Description |
 |------------|-------------|
 | `iterate` | Run a repeatable transcription iteration (saves to JSONL) |
+| `import` | Import ground truth from a JSONL file |
 | `list` | List available transcription runs |
 | `review` | Interactive review with audio playback |
 
@@ -155,6 +156,29 @@ uv run stt-benchmark ground-truth iterate [OPTIONS]
 # Run an iteration with 100 samples
 uv run stt-benchmark ground-truth iterate --samples 100
 ```
+
+### import
+
+Import ground truth transcriptions from a JSONL file.
+
+```bash
+uv run stt-benchmark ground-truth import <JSONL_FILE> [OPTIONS]
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--force, -f` | BOOL | False | Overwrite existing ground truth entries |
+
+```bash
+# Import ground truth from a colleague's JSONL file
+uv run stt-benchmark ground-truth import /path/to/2026-01-03_17-00-06.jsonl
+
+# Force overwrite existing entries
+uv run stt-benchmark ground-truth import /path/to/file.jsonl --force
+```
+
+Only samples that exist in your local database will be imported.
+Samples not yet downloaded will be skipped.
 
 ### list
 

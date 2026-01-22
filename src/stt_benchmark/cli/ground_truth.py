@@ -256,3 +256,123 @@ def review_command(
 
     # Run the interactive evaluation
     run_evaluation(run_path)
+
+
+@app.command("import")
+def import_command(
+    jsonl_file: str = typer.Argument(
+        ...,
+        help="Path to JSONL file from 'ground-truth iterate' command",
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        "-f",
+        help="Overwrite existing ground truth entries",
+    ),
+):
+    """Import ground truth transcriptions from a JSONL file.
+
+    Imports transcriptions from a ground truth iteration run (JSONL file)
+    into the database for use in WER calculations.
+
+    The JSONL file should be from 'ground-truth iterate' command output.
+    Only samples that exist in the local database will be imported.
+    """
+    import json
+    from datetime import datetime
+    from pathlib import Path
+
+    from stt_benchmark.models import GroundTruth
+
+    jsonl_path = Path(jsonl_file)
+    if not jsonl_path.exists():
+        console.print(f"[red]File not found: {jsonl_file}[/red]")
+        raise typer.Exit(1)
+
+    console.print("\n[bold blue]STT Benchmark - Import Ground Truth[/bold blue]\n")
+    console.print(f"File: {jsonl_path}")
+
+    async def run():
+        db = Database()
+        await db.initialize()
+
+        # Get existing sample IDs
+        samples = await db.get_all_samples()
+        sample_ids = {s.sample_id for s in samples}
+
+        if not sample_ids:
+            console.print("[red]No samples in database. Run 'download' first.[/red]")
+            return
+
+        console.print(f"Samples in database: {len(sample_ids)}")
+
+        # Read JSONL file
+        imported = 0
+        skipped_no_sample = 0
+        skipped_existing = 0
+        header_info = None
+
+        with open(jsonl_path) as f:
+            for line in f:
+                record = json.loads(line.strip())
+
+                if record.get("type") == "header":
+                    header_info = record
+                    console.print(f"Model: {record.get('model', 'unknown')}")
+                    console.print(f"Total samples in file: {record.get('num_samples', 'unknown')}")
+                    continue
+
+                if record.get("type") != "sample":
+                    continue
+
+                sample_id = record.get("sample_id")
+                transcription = record.get("transcription")
+
+                if not sample_id or transcription is None:
+                    continue
+
+                # Check if sample exists in our database
+                if sample_id not in sample_ids:
+                    skipped_no_sample += 1
+                    continue
+
+                # Check if ground truth already exists
+                if not force:
+                    existing = await db.get_ground_truth(sample_id)
+                    if existing:
+                        skipped_existing += 1
+                        continue
+
+                # Parse generated_at timestamp
+                generated_at_str = record.get("generated_at")
+                if generated_at_str:
+                    generated_at = datetime.fromisoformat(generated_at_str.replace("Z", "+00:00"))
+                else:
+                    generated_at = datetime.utcnow()
+
+                # Create and insert ground truth
+                gt = GroundTruth(
+                    sample_id=sample_id,
+                    text=transcription,
+                    model_used=header_info.get("model", "unknown") if header_info else "unknown",
+                    generated_at=generated_at,
+                )
+                await db.insert_ground_truth(gt)
+                imported += 1
+
+        console.print(f"\n[green]✓ Imported {imported} ground truth transcriptions[/green]")
+        if skipped_existing:
+            console.print(
+                f"[yellow]Skipped {skipped_existing} (already exist, use --force to overwrite)[/yellow]"
+            )
+        if skipped_no_sample:
+            console.print(f"[dim]Skipped {skipped_no_sample} (sample not in database)[/dim]")
+
+        # Show coverage
+        gt_count = await db.get_ground_truth_count()
+        console.print(f"\nGround truth coverage: {gt_count}/{len(sample_ids)} samples")
+
+        await db.close()
+
+    asyncio.run(run())

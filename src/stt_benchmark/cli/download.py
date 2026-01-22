@@ -87,4 +87,7 @@ def download(
             console.print(f"  5-10s:  {long:4d} samples")
             console.print(f"  10s+:   {very_long:4d} samples")
 
+        # Close database connection to avoid aiosqlite cleanup errors
+        await downloader.db.close()
+
     asyncio.run(run())

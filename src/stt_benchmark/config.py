@@ -22,7 +22,7 @@ class BenchmarkConfig(BaseSettings):
     results_db: Path = Field(default=Path("./stt_benchmark_data/results.db"))
 
     # Dataset configuration
-    dataset_name: str = "pipecat-ai/smart-turn-data-v3.2-train"
+    dataset_name: str = "pipecat-ai/smart-turn-data-v3.1-train"
     num_samples: int = 100
     seed: int = 42
 

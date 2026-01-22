@@ -36,7 +36,7 @@ def download(
 ):
     """Download and prepare audio samples from HuggingFace dataset.
 
-    Downloads samples from the pipecat-ai/smart-turn-data-v3.2-train dataset,
+    Downloads samples from the pipecat-ai/smart-turn-data-v3.1-train dataset,
     converts them to 16kHz PCM audio, and stores metadata in SQLite.
     """
     config = get_config()

@@ -118,6 +118,7 @@ async def _show_all_services_summary():
     table.add_column("Transcripts", justify="right")
     if has_any_wer:
         table.add_column("0% WER", justify="right")
+        table.add_column("E2E 0% WER", justify="right")
         table.add_column("WER Mean", justify="right")
         table.add_column("WER Median", justify="right")
         table.add_column("WER P95", justify="right")
@@ -148,23 +149,34 @@ async def _show_all_services_summary():
 
             if has_any_wer:
                 if wer_summary:
-                    # Combine m/n with percentage for 0% WER
+                    # 0% WER: perfect_count / sample_count (transcribed samples)
                     perfect_pct = (
                         wer_summary["perfect_count"] / wer_summary["sample_count"] * 100
                         if wer_summary["sample_count"] > 0
                         else 0
                     )
                     perfect_str = f"{wer_summary['perfect_count']}/{wer_summary['sample_count']} ({perfect_pct:.1f}%)"
+
+                    # E2E 0% WER: perfect_count / total_runs (all runs)
+                    total_runs = transcript_stats["total_runs"]
+                    e2e_perfect_pct = (
+                        wer_summary["perfect_count"] / total_runs * 100 if total_runs > 0 else 0
+                    )
+                    e2e_perfect_str = (
+                        f"{wer_summary['perfect_count']}/{total_runs} ({e2e_perfect_pct:.1f}%)"
+                    )
+
                     row_data.extend(
                         [
                             perfect_str,
+                            e2e_perfect_str,
                             f"{wer_summary['wer_mean'] * 100:.1f}%",
                             f"{wer_summary['wer_median'] * 100:.1f}%",
                             f"{wer_summary['wer_p95'] * 100:.1f}%",
                         ]
                     )
                 else:
-                    row_data.extend(["-", "-", "-", "-"])
+                    row_data.extend(["-", "-", "-", "-", "-"])
 
             row_data.extend(
                 [
@@ -185,24 +197,21 @@ async def _show_all_services_summary():
         # WER rankings (only if we have WER data)
         summaries_with_wer = [(s, m, ts, ws) for s, m, ts, ws in summaries if ws is not None]
         if summaries_with_wer:
-            console.print("\n[bold]Rankings (by 0% WER rate):[/bold]")
-            ranked_perfect = sorted(
+            console.print("\n[bold]Rankings (by E2E 0% WER rate):[/bold]")
+            ranked_e2e = sorted(
                 summaries_with_wer,
-                key=lambda x: x[3]["perfect_count"] / x[3]["sample_count"]
-                if x[3]["sample_count"] > 0
+                key=lambda x: x[3]["perfect_count"] / x[2]["total_runs"]
+                if x[2]["total_runs"] > 0
                 else 0,
                 reverse=True,
             )
-            for i, (service, model, _, wer_summary) in enumerate(ranked_perfect, 1):
+            for i, (service, model, transcript_stats, wer_summary) in enumerate(ranked_e2e, 1):
                 medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
                 name = f"{service.value}" + (f" ({model})" if model else "")
-                perfect_pct = (
-                    wer_summary["perfect_count"] / wer_summary["sample_count"] * 100
-                    if wer_summary["sample_count"] > 0
-                    else 0
-                )
+                total_runs = transcript_stats["total_runs"]
+                e2e_pct = wer_summary["perfect_count"] / total_runs * 100 if total_runs > 0 else 0
                 console.print(
-                    f"  {medal} {name}: {wer_summary['perfect_count']}/{wer_summary['sample_count']} ({perfect_pct:.1f}%)"
+                    f"  {medal} {name}: {wer_summary['perfect_count']}/{total_runs} ({e2e_pct:.1f}%)"
                 )
 
             console.print("\n[bold]Rankings (by mean Semantic WER):[/bold]")

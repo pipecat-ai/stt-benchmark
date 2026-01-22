@@ -1,0 +1,1 @@
+"""CLI for STT benchmarking."""

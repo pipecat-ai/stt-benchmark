@@ -811,7 +811,8 @@ class Database:
     ) -> dict | None:
         """Get summary statistics for a service.
 
-        Returns a dict with wer_mean, wer_median, ttfb_mean, ttfb_median, ttfb_p95, sample_count.
+        Returns a dict with wer_mean, wer_median, ttfb_mean, ttfb_median, ttfb_p95,
+        sample_count, perfect_count (0% WER samples).
         """
         model_filter = model_name if model_name else ""
         cursor = await self._conn.execute(
@@ -819,7 +820,8 @@ class Database:
             SELECT
                 COUNT(*) as sample_count,
                 AVG(w.wer) as wer_mean,
-                AVG(r.ttfb_seconds) as ttfb_mean
+                AVG(r.ttfb_seconds) as ttfb_mean,
+                SUM(CASE WHEN w.wer = 0 THEN 1 ELSE 0 END) as perfect_count
             FROM wer_metrics w
             JOIN results r ON w.sample_id = r.sample_id
                 AND w.service_name = r.service_name
@@ -870,6 +872,7 @@ class Database:
             "sample_count": row["sample_count"],
             "wer_mean": row["wer_mean"] or 0,
             "wer_median": wer_median,
+            "perfect_count": row["perfect_count"] or 0,
             "ttfb_mean": row["ttfb_mean"] or 0,
             "ttfb_median": ttfb_median,
             "ttfb_p95": ttfb_p95,

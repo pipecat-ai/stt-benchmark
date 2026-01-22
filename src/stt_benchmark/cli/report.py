@@ -116,8 +116,8 @@ async def _show_all_services_summary():
     table = Table(title="Service Comparison")
     table.add_column("Service", style="cyan", no_wrap=True)
     table.add_column("Transcripts", justify="right")
-    table.add_column("Success", justify="right")
     if has_any_wer:
+        table.add_column("0% WER", justify="right")
         table.add_column("WER Mean", justify="right")
         table.add_column("WER Median", justify="right")
     table.add_column("TTFB Mean", justify="right")
@@ -136,27 +136,33 @@ async def _show_all_services_summary():
         if transcript_stats:
             summaries.append((service_name, model_name, transcript_stats, wer_summary))
 
-            rate_str = f"{transcript_stats['success_rate'] * 100:.1f}%"
-            transcripts_str = (
-                f"{transcript_stats['successful_transcripts']}/{transcript_stats['total_runs']}"
-            )
+            # Combine m/n with percentage for transcripts
+            transcripts_pct = transcript_stats["success_rate"] * 100
+            transcripts_str = f"{transcript_stats['successful_transcripts']}/{transcript_stats['total_runs']} ({transcripts_pct:.1f}%)"
 
             row_data = [
                 service_name.value,
                 transcripts_str,
-                rate_str,
             ]
 
             if has_any_wer:
                 if wer_summary:
+                    # Combine m/n with percentage for 0% WER
+                    perfect_pct = (
+                        wer_summary["perfect_count"] / wer_summary["sample_count"] * 100
+                        if wer_summary["sample_count"] > 0
+                        else 0
+                    )
+                    perfect_str = f"{wer_summary['perfect_count']}/{wer_summary['sample_count']} ({perfect_pct:.1f}%)"
                     row_data.extend(
                         [
+                            perfect_str,
                             f"{wer_summary['wer_mean'] * 100:.1f}%",
                             f"{wer_summary['wer_median'] * 100:.1f}%",
                         ]
                     )
                 else:
-                    row_data.extend(["-", "-"])
+                    row_data.extend(["-", "-", "-"])
 
             row_data.extend(
                 [
@@ -177,6 +183,26 @@ async def _show_all_services_summary():
         # WER rankings (only if we have WER data)
         summaries_with_wer = [(s, m, ts, ws) for s, m, ts, ws in summaries if ws is not None]
         if summaries_with_wer:
+            console.print("\n[bold]Rankings (by 0% WER rate):[/bold]")
+            ranked_perfect = sorted(
+                summaries_with_wer,
+                key=lambda x: x[3]["perfect_count"] / x[3]["sample_count"]
+                if x[3]["sample_count"] > 0
+                else 0,
+                reverse=True,
+            )
+            for i, (service, model, _, wer_summary) in enumerate(ranked_perfect, 1):
+                medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
+                name = f"{service.value}" + (f" ({model})" if model else "")
+                perfect_pct = (
+                    wer_summary["perfect_count"] / wer_summary["sample_count"] * 100
+                    if wer_summary["sample_count"] > 0
+                    else 0
+                )
+                console.print(
+                    f"  {medal} {name}: {wer_summary['perfect_count']}/{wer_summary['sample_count']} ({perfect_pct:.1f}%)"
+                )
+
             console.print("\n[bold]Rankings (by mean Semantic WER):[/bold]")
             ranked_wer = sorted(summaries_with_wer, key=lambda x: x[3]["wer_mean"])
             for i, (service, model, _, wer_summary) in enumerate(ranked_wer, 1):
@@ -192,8 +218,8 @@ async def _show_all_services_summary():
             name = f"{service.value}" + (f" ({model})" if model else "")
             console.print(f"  {medal} {name}: {transcript_stats['ttfb_mean'] * 1000:.0f}ms")
 
-        # Transcript success rankings
-        console.print("\n[bold]Rankings (by transcript success):[/bold]")
+        # Transcript rate rankings
+        console.print("\n[bold]Rankings (by % transcribed):[/bold]")
         ranked_rate = sorted(summaries, key=lambda x: x[2]["success_rate"], reverse=True)
         for i, (service, model, transcript_stats, _) in enumerate(ranked_rate, 1):
             medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
@@ -332,11 +358,11 @@ async def _generate_detailed_report(
         f.write(f"Total samples: {len(report_data)}\n\n")
 
         if transcript_stats:
-            f.write("Transcript Success:\n")
+            f.write("Transcription Rate:\n")
             f.write(f"  Total runs: {transcript_stats['total_runs']}\n")
-            f.write(f"  Successful: {transcript_stats['successful_transcripts']}\n")
+            f.write(f"  Transcribed: {transcript_stats['successful_transcripts']}\n")
             f.write(f"  Failed: {transcript_stats['failed_transcripts']}\n")
-            f.write(f"  Success: {transcript_stats['success_rate'] * 100:.1f}%\n\n")
+            f.write(f"  % Transcribed: {transcript_stats['success_rate'] * 100:.1f}%\n\n")
 
         f.write("Semantic WER (Word Error Rate):\n")
         f.write(f"  Mean: {sum(wer_values) / len(wer_values) * 100:.2f}%\n")
@@ -434,11 +460,11 @@ async def _generate_detailed_report(
     table.add_row("Total Samples", str(len(report_data)))
     table.add_row("", "")  # Spacer
     if transcript_stats:
-        table.add_row("[bold]Transcript Success[/bold]", "")
+        table.add_row("[bold]Transcription Rate[/bold]", "")
         table.add_row("  Total Runs", str(transcript_stats["total_runs"]))
-        table.add_row("  Successful", str(transcript_stats["successful_transcripts"]))
+        table.add_row("  Transcribed", str(transcript_stats["successful_transcripts"]))
         table.add_row("  Failed", str(transcript_stats["failed_transcripts"]))
-        table.add_row("  Success", f"{transcript_stats['success_rate'] * 100:.1f}%")
+        table.add_row("  % Transcribed", f"{transcript_stats['success_rate'] * 100:.1f}%")
         table.add_row("", "")  # Spacer
     table.add_row("[bold]Semantic WER[/bold]", "")
     table.add_row("  Mean", f"{sum(wer_values) / len(wer_values) * 100:.2f}%")

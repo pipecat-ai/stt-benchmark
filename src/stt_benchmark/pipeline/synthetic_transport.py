@@ -45,6 +45,7 @@ class SyntheticInputTransport(BaseInputTransport):
         vad_stop_secs: float = 0.2,
         transcription_received: asyncio.Event | None = None,
         max_silence_timeout: float = 10.0,
+        post_transcription_delay: float = 2.0,
     ):
         """Initialize the synthetic input transport.
 
@@ -57,6 +58,8 @@ class SyntheticInputTransport(BaseInputTransport):
                 If provided, silence is sent until this event is set or timeout.
                 If None, sends a fixed amount of silence for compatibility.
             max_silence_timeout: Maximum time to send silence in seconds (default 10.0s)
+            post_transcription_delay: Time to continue sending silence after first
+                transcription to collect additional segments (default 2.0s)
         """
         # Create Silero VAD with configurable stop threshold
         vad_analyzer = SileroVADAnalyzer(params=VADParams(stop_secs=vad_stop_secs))
@@ -74,6 +77,7 @@ class SyntheticInputTransport(BaseInputTransport):
         self._vad_stop_secs = vad_stop_secs
         self._transcription_received = transcription_received
         self._max_silence_timeout = max_silence_timeout
+        self._post_transcription_delay = post_transcription_delay
 
         # Calculate chunk size in bytes (16-bit audio = 2 bytes per sample)
         samples_per_chunk = int(sample_rate * chunk_ms / 1000)
@@ -106,6 +110,7 @@ class SyntheticInputTransport(BaseInputTransport):
         vad_stop_secs: float = 0.2,
         transcription_received: asyncio.Event | None = None,
         max_silence_timeout: float = 10.0,
+        post_transcription_delay: float = 2.0,
     ) -> "SyntheticInputTransport":
         """Create a transport from an audio file.
 
@@ -116,6 +121,8 @@ class SyntheticInputTransport(BaseInputTransport):
             vad_stop_secs: Silence duration for VAD stop
             transcription_received: Event set when transcription is received
             max_silence_timeout: Maximum time to send silence in seconds
+            post_transcription_delay: Time to continue sending silence after first
+                transcription to collect additional segments
 
         Returns:
             SyntheticInputTransport instance
@@ -128,6 +135,7 @@ class SyntheticInputTransport(BaseInputTransport):
             vad_stop_secs=vad_stop_secs,
             transcription_received=transcription_received,
             max_silence_timeout=max_silence_timeout,
+            post_transcription_delay=post_transcription_delay,
         )
 
     async def start(self, frame: StartFrame):
@@ -252,7 +260,7 @@ class SyntheticInputTransport(BaseInputTransport):
 
             # Send silence until transcription received or timeout
             if self._transcription_received is not None:
-                # Dynamic silence: keep sending until transcription arrives
+                # Phase 1: Wait for first transcription
                 silence_start = time.time()
                 silence_chunks_sent = 0
 
@@ -269,7 +277,24 @@ class SyntheticInputTransport(BaseInputTransport):
 
                 silence_duration = silence_chunks_sent * self._chunk_ms / 1000
                 if self._transcription_received.is_set():
-                    logger.debug(f"Transcription received after {silence_duration:.2f}s of silence")
+                    logger.debug(
+                        f"First transcription received after {silence_duration:.2f}s of silence"
+                    )
+
+                    # Phase 2: Continue sending silence for additional time to collect
+                    # remaining transcript segments (streaming STT sends multiple frames)
+                    post_start = time.time()
+                    post_chunks = 0
+
+                    while (time.time() - post_start) < self._post_transcription_delay:
+                        await self._send_silence_chunk(silence_data, sleep_time)
+                        post_chunks += 1
+
+                    post_duration = post_chunks * self._chunk_ms / 1000
+                    logger.debug(
+                        f"Post-transcription silence complete ({post_duration:.2f}s) - "
+                        f"allowing additional transcript segments"
+                    )
                 else:
                     logger.debug(f"Silence phase ended after {silence_duration:.2f}s (timeout)")
             else:

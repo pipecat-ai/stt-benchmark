@@ -28,6 +28,7 @@ class BenchmarkRunner:
         vad_stop_secs: float = 0.2,
         max_silence_timeout_secs: float = 10.0,
         transcription_timeout_secs: float = 10.0,
+        post_transcription_delay_secs: float = 2.0,
     ):
         """Initialize the benchmark runner.
 
@@ -37,6 +38,8 @@ class BenchmarkRunner:
             vad_stop_secs: Silence duration for VAD stop.
             max_silence_timeout_secs: Max time to send silence while waiting for transcription.
             transcription_timeout_secs: Max time to wait for transcription after silence ends.
+            post_transcription_delay_secs: Time to continue sending silence after first
+                transcription to collect additional segments.
         """
         config = get_config()
         self.sample_rate = sample_rate or config.sample_rate
@@ -46,6 +49,7 @@ class BenchmarkRunner:
         self.transcription_timeout_secs = (
             transcription_timeout_secs or config.transcription_timeout_secs
         )
+        self.post_transcription_delay_secs = post_transcription_delay_secs
 
     async def benchmark_sample(
         self,
@@ -98,7 +102,8 @@ class BenchmarkRunner:
 
             # Create transport with audio
             # Pass transcription_received event so transport sends silence
-            # until transcription arrives (or timeout)
+            # until transcription arrives (or timeout), then continues for
+            # post_transcription_delay to collect additional segments
             transport = SyntheticInputTransport(
                 audio_data=audio_data,
                 sample_rate=self.sample_rate,
@@ -106,6 +111,7 @@ class BenchmarkRunner:
                 vad_stop_secs=self.vad_stop_secs,
                 transcription_received=transcription_observer._transcription_received,
                 max_silence_timeout=self.max_silence_timeout_secs,
+                post_transcription_delay=self.post_transcription_delay_secs,
             )
 
             # Build pipeline

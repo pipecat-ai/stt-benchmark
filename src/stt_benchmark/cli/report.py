@@ -120,7 +120,6 @@ async def _show_all_services_summary():
         table.add_column("0% WER", justify="right")
         table.add_column("E2E 0% WER", justify="right")
         table.add_column("WER Mean", justify="right")
-        table.add_column("WER Median", justify="right")
         table.add_column("WER P95", justify="right")
     table.add_column("TTFB Median", justify="right")
     table.add_column("TTFB P95", justify="right")
@@ -170,13 +169,12 @@ async def _show_all_services_summary():
                         [
                             perfect_str,
                             e2e_perfect_str,
-                            f"{wer_summary['wer_mean'] * 100:.1f}%",
-                            f"{wer_summary['wer_median'] * 100:.1f}%",
+                            f"{wer_summary['wer_mean'] * 100:.2f}%",
                             f"{wer_summary['wer_p95'] * 100:.1f}%",
                         ]
                     )
                 else:
-                    row_data.extend(["-", "-", "-", "-", "-"])
+                    row_data.extend(["-", "-", "-", "-"])
 
             row_data.extend(
                 [

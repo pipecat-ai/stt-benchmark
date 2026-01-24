@@ -4,14 +4,31 @@ A framework for benchmarking Speech-to-Text services with TTFB (Time To First By
 
 ## Results Summary
 
-> TODO: This is a PLACEHOLDER. Replace me!
+Benchmark results on 1000 samples from the `pipecat-ai/smart-turn-data-v3.2-train` dataset.
 
-| Service | Semantic WER | TTFB Median | TTFB P95 | Samples |
-|---------|--------------|-------------|----------|---------|
-| deepgram | 3.2% | 220ms | 412ms | 500 |
-| assemblyai | 4.1% | 324ms | 890ms | 500 |
-| groq | 5.1% | 180ms | 340ms | 500 |
-| openai | 5.8% | 485ms | 1120ms | 500 |
+| Service | Transcripts | E2E 0% WER | WER Mean | TTFB Median | TTFB P95 | TTFB P99 |
+|---------|-------------|------------|----------|-------------|----------|----------|
+| assemblyai | 99.8% | 65.2% | 3.86% | 326ms | 1476ms | 1936ms |
+| aws | 99.9% | 76.1% | 1.81% | 1105ms | 1513ms | 1924ms |
+| azure | 99.9% | 80.2% | 1.44% | 1006ms | 1339ms | 1743ms |
+| cartesia | 99.9% | 59.8% | 4.14% | 257ms | 279ms | 526ms |
+| deepgram | 99.8% | 75.3% | 1.91% | 247ms | 299ms | 316ms |
+| elevenlabs | 99.7% | 79.8% | 3.26% | 295ms | 380ms | 465ms |
+| google | 100.0% | 67.8% | 3.14% | 863ms | 1132ms | 1522ms |
+| soniox | 99.9% | 81.1% | 1.77% | 704ms | 1709ms | 2123ms |
+| speechmatics | 99.7% | 68.5% | 2.58% | 1444ms | 1939ms | 2055ms |
+
+### Metrics Glossary
+
+| Metric | Description |
+|--------|-------------|
+| **Transcripts** | Percentage of samples where STT successfully returned a transcription |
+| **E2E 0% WER** | Perfect transcriptions (0% error) out of total benchmark runs |
+| **WER Mean** | Average semantic word error rate across all samples |
+| **WER P95** | 95th percentile WER - worst 5% of samples have WER above this |
+| **TTFB Median** | Median time from user stops speaking to first transcription byte |
+| **TTFB P95** | 95th percentile TTFB - worst 5% of samples have latency above this |
+| **TTFB P99** | 99th percentile TTFB - worst 1% of samples have latency above this |
 
 > **Semantic WER** measures only transcription errors that would impact an LLM agent's understanding. Punctuation, contractions, filler words, and equivalent phrasings are ignored.
 

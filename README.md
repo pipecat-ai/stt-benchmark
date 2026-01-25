@@ -4,7 +4,7 @@ A framework for benchmarking Speech-to-Text services with TTFS (Time To Final Se
 
 ## Results Summary
 
-Benchmark results on 1000 samples from the `pipecat-ai/smart-turn-data-v3.2-train` dataset.
+Benchmark results on 1000 samples from the `pipecat-ai/smart-turn-data-v3.1-train` dataset.
 
 | Service | Transcripts | E2E 0% WER | WER Mean | TTFS Median | TTFS P95 | TTFS P99 |
 |---------|-------------|------------|----------|-------------|----------|----------|

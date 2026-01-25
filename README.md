@@ -18,6 +18,12 @@ Benchmark results on 1000 samples from the `pipecat-ai/smart-turn-data-v3.2-trai
 | soniox | 99.9% | 81.1% | 1.77% | 704ms | 1709ms | 2123ms |
 | speechmatics | 99.7% | 68.5% | 2.58% | 1444ms | 1939ms | 2055ms |
 
+### Latency vs Accuracy Trade-off
+
+![STT Service Pareto Frontier](assets/stt_pareto_frontier.png)
+
+The Pareto frontier shows services that offer the best trade-off between latency and accuracy—no other service is better on both metrics. Services on the frontier represent efficient choices depending on your priorities.
+
 ### Metrics Glossary
 
 | Metric | Description |

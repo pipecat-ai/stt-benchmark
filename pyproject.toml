@@ -53,6 +53,9 @@ dev = [
     "ruff>=0.1.0",
     "mypy>=1.8.0",
 ]
+viz = [
+    "matplotlib>=3.8.0",
+]
 
 [project.scripts]
 stt-benchmark = "stt_benchmark.cli.main:app"

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate a Pareto frontier plot of TTFB vs Semantic WER for STT services."""
+"""Generate a Pareto frontier plot of TTFS vs Semantic WER for STT services."""
 
 import argparse
 import asyncio
@@ -40,7 +40,7 @@ def get_data_from_db():
 def plot_pareto_frontier(
     data: dict, output_path: str = "stt_pareto_frontier.png", show: bool = False
 ):
-    """Generate the TTFB vs WER scatter plot with Pareto frontier annotation."""
+    """Generate the TTFS vs WER scatter plot with Pareto frontier annotation."""
     try:
         import matplotlib.pyplot as plt
         from matplotlib.patches import FancyBboxPatch
@@ -75,7 +75,7 @@ def plot_pareto_frontier(
         )
 
     # Configure axes
-    ax.set_xlabel("TTFB Median (ms) (lower is better)", fontsize=12)
+    ax.set_xlabel("TTFS Median (ms) (lower is better)", fontsize=12)
     ax.set_ylabel("Semantic WER Mean (%) (lower is better)", fontsize=12)
     ax.set_title(
         "STT Pareto Frontier: Latency vs Accuracy",
@@ -117,7 +117,7 @@ def plot_pareto_frontier(
         if not is_dominated:
             pareto_optimal.append((name, ttfb, wer))
 
-    # Sort Pareto optimal by TTFB (fastest first)
+    # Sort Pareto optimal by TTFS (fastest first)
     pareto_optimal.sort(key=lambda x: x[1])
 
     # Draw Pareto frontier line connecting optimal points
@@ -178,7 +178,7 @@ def plot_pareto_frontier(
         # List Pareto optimal services with stats
         service_strs = []
         for name, ttfb, wer in pareto_optimal:
-            service_strs.append(f"{name.capitalize()}: TTFB {ttfb:.0f}ms, WER {wer:.2f}%")
+            service_strs.append(f"{name.capitalize()}: TTFS {ttfb:.0f}ms, WER {wer:.2f}%")
 
         # Display services in a wrapped format
         services_text = "    ".join(service_strs)
@@ -201,7 +201,7 @@ def plot_pareto_frontier(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate Pareto frontier plot of TTFB vs Semantic WER for STT services"
+        description="Generate Pareto frontier plot of TTFS vs Semantic WER for STT services"
     )
     parser.add_argument(
         "-o",
@@ -225,7 +225,7 @@ def main():
 
     print(f"Found {len(data)} services with complete metrics")
     for name, metrics in sorted(data.items()):
-        print(f"  {name}: TTFB={metrics['ttfb_median']:.0f}ms, WER={metrics['wer_mean']:.2f}%")
+        print(f"  {name}: TTFS={metrics['ttfb_median']:.0f}ms, WER={metrics['wer_mean']:.2f}%")
 
     print("\nGenerating plot...")
     plot_pareto_frontier(data, args.output, args.show)

@@ -310,7 +310,7 @@ uv run stt-benchmark report --service deepgram --output ./reports
 ```
                           Service Comparison (Semantic WER)                          
 ┏━━━━━━━━━━━━┳━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━━━┓
-┃ Service    ┃ Model ┃ Samples ┃ WER Mean ┃ WER Median ┃ TTFB Mean ┃ TTFB Median ┃
+┃ Service    ┃ Model ┃ Samples ┃ WER Mean ┃ WER Median ┃ TTFS Mean ┃ TTFS Median ┃
 ┡━━━━━━━━━━━━╇━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━━━┩
 │ deepgram   │ -     │     500 │     3.2% │       0.0% │     245ms │       220ms │
 │ assemblyai │ -     │     500 │     4.1% │       0.0% │     380ms │       324ms │

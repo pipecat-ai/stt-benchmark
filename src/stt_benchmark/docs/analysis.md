@@ -71,7 +71,7 @@ uv run stt-benchmark run --services all
 ```
 
 **What's measured:**
-- **TTFB** - Time from user stops speaking to first transcription byte
+- **TTFS** - Time from user stops speaking to final transcription segment
 - **Transcription** - Full text output for WER calculation
 
 **Typical runtime:** ~1-2 minutes per 100 samples per service (varies by service latency).
@@ -165,7 +165,7 @@ Output:
 ```
                           Service Comparison (Semantic WER)                          
 ┏━━━━━━━━━━━━┳━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━━━┓
-┃ Service    ┃ Model ┃ Samples ┃ WER Mean ┃ WER Median ┃ TTFB Mean ┃ TTFB Median ┃
+┃ Service    ┃ Model ┃ Samples ┃ WER Mean ┃ WER Median ┃ TTFS Mean ┃ TTFS Median ┃
 ┡━━━━━━━━━━━━╇━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━━━┩
 │ deepgram   │ -     │     100 │     3.2% │       0.0% │     245ms │       220ms │
 │ groq       │ -     │     100 │     4.8% │       0.0% │     180ms │       165ms │
@@ -237,9 +237,9 @@ uv run stt-benchmark wer --force-recalculate
 
 ## Interpreting Results
 
-### TTFB
+### TTFS (Time To Final Segment)
 
-| TTFB Range | Assessment |
+| TTFS Range | Assessment |
 |------------|------------|
 | < 300ms | Excellent - suitable for real-time voice agents |
 | 300-500ms | Good - acceptable for most applications |
@@ -258,7 +258,7 @@ uv run stt-benchmark wer --force-recalculate
 ### Key Metrics
 
 - **Mean vs Median WER**: High mean with low median indicates outliers (some very bad samples)
-- **P95 TTFB**: Worst-case latency (important for user experience)
+- **P95 TTFS**: Worst-case latency (important for user experience)
 - **Sample count**: Ensure sufficient samples for statistical significance (100+ recommended)
 
 ---
@@ -307,7 +307,7 @@ Some services may time out on long audio. The default timeout is 10 seconds afte
 ```sql
 -- Samples per service
 SELECT service_name, COUNT(*) as count, 
-       AVG(ttfb_seconds) as avg_ttfb
+       AVG(ttfb_seconds) as avg_ttfs
 FROM benchmark_results 
 WHERE error IS NULL
 GROUP BY service_name;

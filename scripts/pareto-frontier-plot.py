@@ -78,7 +78,7 @@ def plot_pareto_frontier(
     ax.set_xlabel("TTFB Median (ms) (lower is better)", fontsize=12)
     ax.set_ylabel("Semantic WER Mean (%) (lower is better)", fontsize=12)
     ax.set_title(
-        "STT Service Pareto Frontier: Latency vs Accuracy\n(best services are in the lower-left)",
+        "STT Pareto Frontier: Latency vs Accuracy",
         fontsize=14,
         fontweight="bold",
     )

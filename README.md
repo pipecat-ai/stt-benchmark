@@ -31,7 +31,6 @@ The Pareto frontier shows services that offer the best trade-off between latency
 | **Transcripts** | Percentage of samples where STT successfully returned a transcription |
 | **E2E 0% WER** | Perfect transcriptions (0% error) out of total benchmark runs |
 | **WER Mean** | Average semantic word error rate across all samples |
-| **WER P95** | 95th percentile WER - worst 5% of samples have WER above this |
 | **TTFS Median** | Median time from user stops speaking to final transcription segment |
 | **TTFS P95** | 95th percentile TTFS - worst 5% of samples have latency above this |
 | **TTFS P99** | 99th percentile TTFS - worst 1% of samples have latency above this |

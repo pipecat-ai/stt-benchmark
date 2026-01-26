@@ -187,6 +187,13 @@ STT_SERVICES: dict[str, STTServiceConfig] = {
         pipecat_class="SonioxSTTService",
         default_model=None,
     ),
+    "soniox_manual": STTServiceConfig(
+        name="soniox_manual",
+        api_key_env="SONIOX_API_KEY",
+        pipecat_module="pipecat.services.soniox.stt",
+        pipecat_class="SonioxSTTService",
+        default_model=None,
+    ),
     "speechmatics": STTServiceConfig(
         name="speechmatics",
         api_key_env="SPEECHMATICS_API_KEY",

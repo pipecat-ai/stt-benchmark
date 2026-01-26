@@ -33,6 +33,7 @@ class ServiceName(str, Enum):
     SARVAM = "sarvam"
     SPEECHMATICS = "speechmatics"
     SONIOX = "soniox"
+    SONIOX_MANUAL = "soniox_manual"
     WHISPER = "whisper"
 
 

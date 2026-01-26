@@ -14,8 +14,11 @@ Benchmark results on 1000 samples from the `pipecat-ai/smart-turn-data-v3.1-trai
 | cartesia | 99.9% | 59.8% | 4.14% | 257ms | 279ms | 526ms |
 | deepgram | 99.8% | 75.3% | 1.91% | 247ms | 299ms | 316ms |
 | elevenlabs | 99.7% | 79.8% | 3.26% | 295ms | 380ms | 465ms |
+| gladia | 99.6% | 68.6% | 5.08% | 882ms | 1733ms | 1948ms |
 | google | 100.0% | 67.8% | 3.14% | 863ms | 1132ms | 1522ms |
-| soniox | 99.9% | 81.1% | 1.77% | 704ms | 1709ms | 2123ms |
+| hatora | 98.9% | 66.2% | 4.21% | 516ms | 715ms | 879ms |
+| openai | 100.0% | 74.8% | 3.70% | 852ms | 1413ms | 1806ms |
+| soniox | 100.0% | 78.8% | 2.06% | 454ms | 853ms | 1166ms |
 | speechmatics | 99.7% | 68.5% | 2.58% | 1444ms | 1939ms | 2055ms |
 
 ### Latency vs Accuracy Trade-off

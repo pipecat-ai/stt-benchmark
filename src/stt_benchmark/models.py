@@ -26,7 +26,6 @@ class ServiceName(str, Enum):
     GOOGLE = "google"
     GRADIUM = "gradium"
     GROQ = "groq"
-    HATHORA = "hathora"
     NVIDIA = "nvidia"
     OPENAI = "openai"
     SAMBANOVA = "sambanova"

@@ -145,13 +145,6 @@ STT_SERVICES: dict[str, STTServiceConfig] = {
         pipecat_class="GroqSTTService",
         default_model="whisper-large-v3-turbo",
     ),
-    "hathora": STTServiceConfig(
-        name="hathora",
-        api_key_env="HATHORA_API_KEY",
-        pipecat_module="pipecat.services.hathora.stt",
-        pipecat_class="HathoraSTTService",
-        default_model="nvidia-parakeet-tdt-0.6b-v3",
-    ),
     "nvidia": STTServiceConfig(
         name="nvidia",
         api_key_env="NVIDIA_API_KEY",

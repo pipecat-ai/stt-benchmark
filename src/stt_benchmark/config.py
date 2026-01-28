@@ -38,7 +38,6 @@ class BenchmarkConfig(BaseSettings):
     google_application_credentials: str = Field(default="", alias="GOOGLE_APPLICATION_CREDENTIALS")
     gradium_api_key: str = Field(default="", alias="GRADIUM_API_KEY")
     groq_api_key: str = Field(default="", alias="GROQ_API_KEY")
-    hathora_api_key: str = Field(default="", alias="HATHORA_API_KEY")
     nvidia_api_key: str = Field(default="", alias="NVIDIA_API_KEY")
     openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")
     sambanova_api_key: str = Field(default="", alias="SAMBANOVA_API_KEY")

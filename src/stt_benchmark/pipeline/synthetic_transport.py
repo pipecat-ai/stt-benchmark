@@ -10,15 +10,8 @@ from pathlib import Path
 
 from loguru import logger
 from pipecat.audio.vad.silero import SileroVADAnalyzer
-from pipecat.audio.vad.vad_analyzer import VADParams, VADState
-from pipecat.frames.frames import (
-    Frame,
-    InputAudioRawFrame,
-    StartFrame,
-    UserStoppedSpeakingFrame,
-    VADUserStoppedSpeakingFrame,
-)
-from pipecat.processors.frame_processor import FrameDirection
+from pipecat.audio.vad.vad_analyzer import VADParams
+from pipecat.frames.frames import InputAudioRawFrame, StartFrame
 from pipecat.transports.base_input import BaseInputTransport
 from pipecat.transports.base_transport import TransportParams
 
@@ -93,9 +86,6 @@ class SyntheticInputTransport(BaseInputTransport):
         # Event to signal when audio pumping is complete
         self._audio_complete = asyncio.Event()
 
-        # VAD tracking - timestamp of last VADUserStoppedSpeakingFrame
-        self._last_vad_stopped_time: float | None = None
-
     @property
     def vad_stop_secs(self) -> float:
         """Return the VAD stop duration for timing calculations."""
@@ -142,9 +132,6 @@ class SyntheticInputTransport(BaseInputTransport):
         """Start the transport and begin pumping audio."""
         await super().start(frame)
 
-        # Reset VAD state for this sample
-        self._last_vad_stopped_time = None
-
         # Wait for transport to be ready
         await self.set_transport_ready(frame)
 
@@ -155,26 +142,6 @@ class SyntheticInputTransport(BaseInputTransport):
 
         # Launch the audio pumping task
         self._pump_task = self.create_task(self._pump_audio())
-
-    async def push_frame(self, frame: Frame, direction: FrameDirection = FrameDirection.DOWNSTREAM):
-        """Override to track VADUserStoppedSpeakingFrame timing."""
-        if isinstance(frame, VADUserStoppedSpeakingFrame):
-            self._last_vad_stopped_time = time.time()
-        await super().push_frame(frame, direction)
-
-    async def _handle_user_interruption(self, vad_state: VADState, emulated: bool = False):
-        """Override to suppress automatic UserStoppedSpeakingFrame emission.
-
-        We manually emit UserStoppedSpeakingFrame after the audio ends to
-        simulate Smart Turn behavior.
-        """
-        if vad_state == VADState.SPEAKING:
-            # Handle speaking start normally
-            await super()._handle_user_interruption(vad_state, emulated)
-        elif vad_state == VADState.QUIET:
-            # Don't emit UserStoppedSpeakingFrame - we'll do it manually later
-            logger.debug("Suppressing automatic UserStoppedSpeakingFrame")
-            self._user_speaking = False
 
     async def _pump_audio(self):
         """Pump audio frames into the pipeline with real-time pacing."""
@@ -197,66 +164,6 @@ class SyntheticInputTransport(BaseInputTransport):
                 await asyncio.sleep(sleep_time)
 
             logger.debug(f"Sent {chunks_sent} audio chunks ({self._duration_seconds:.2f}s)")
-
-            # Send UserStoppedSpeakingFrame after a brief delay
-            SMART_TURN_DELAY = 0.05  # 50ms after VAD
-            VAD_RECENT_THRESHOLD = 0.2  # 200ms
-
-            audio_end_time = time.time()
-            user_stopped_sent = False
-
-            if (
-                self._last_vad_stopped_time
-                and (audio_end_time - self._last_vad_stopped_time) < VAD_RECENT_THRESHOLD
-            ):
-                # VAD fired recently - schedule UserStoppedSpeakingFrame at VAD+delay
-                target_time = self._last_vad_stopped_time + SMART_TURN_DELAY
-
-                if target_time <= audio_end_time:
-                    # Target already passed - send immediately
-                    logger.debug("VAD recent, sending UserStoppedSpeakingFrame immediately")
-                    await self.push_frame(UserStoppedSpeakingFrame())
-                    user_stopped_sent = True
-                else:
-                    # Wait until target time while sending silence
-                    while time.time() < target_time:
-                        await self._send_silence_chunk(silence_data, sleep_time)
-                    logger.debug(
-                        f"Sending UserStoppedSpeakingFrame (VAD+{SMART_TURN_DELAY*1000:.0f}ms)"
-                    )
-                    await self.push_frame(UserStoppedSpeakingFrame())
-                    user_stopped_sent = True
-            elif self._last_vad_stopped_time:
-                # VAD fired earlier - send shortly after audio ends
-                target_time = audio_end_time + SMART_TURN_DELAY
-                while time.time() < target_time:
-                    await self._send_silence_chunk(silence_data, sleep_time)
-                logger.debug("Sending UserStoppedSpeakingFrame (delayed)")
-                await self.push_frame(UserStoppedSpeakingFrame())
-                user_stopped_sent = True
-            else:
-                # No VAD yet - wait for it
-                logger.debug("No VAD yet, waiting for fresh VAD event...")
-                timeout_time = audio_end_time + 5.0  # 5s safety timeout
-
-                while not user_stopped_sent:
-                    await self._send_silence_chunk(silence_data, sleep_time)
-
-                    if self._last_vad_stopped_time:
-                        time_since_vad = time.time() - self._last_vad_stopped_time
-                        if time_since_vad >= SMART_TURN_DELAY:
-                            logger.debug(
-                                f"Sending UserStoppedSpeakingFrame ({time_since_vad*1000:.0f}ms after VAD)"
-                            )
-                            await self.push_frame(UserStoppedSpeakingFrame())
-                            user_stopped_sent = True
-                            break
-
-                    if time.time() > timeout_time:
-                        logger.warning("Timeout, forcing UserStoppedSpeakingFrame")
-                        await self.push_frame(UserStoppedSpeakingFrame())
-                        user_stopped_sent = True
-                        break
 
             # Send silence until transcription received or timeout
             if self._transcription_received is not None:

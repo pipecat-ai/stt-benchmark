@@ -2034,7 +2034,7 @@ wheels = [
 
 [[package]]
 name = "pipecat-ai"
-source = { editable = "../pipecat" }
+source = { editable = "../pipecat-2" }
 dependencies = [
     { name = "aiofiles" },
     { name = "aiohttp" },
@@ -2123,7 +2123,7 @@ whisper = [
 [package.metadata]
 requires-dist = [
     { name = "accelerate", marker = "extra == 'moondream'", specifier = "~=1.10.0" },
-    { name = "aic-sdk", marker = "extra == 'aic'", specifier = "~=1.2.0" },
+    { name = "aic-sdk", marker = "extra == 'aic'", specifier = "~=2.0.1" },
     { name = "aioboto3", marker = "extra == 'aws'", specifier = "~=15.5.0" },
     { name = "aiofiles", specifier = ">=24.1.0,<25" },
     { name = "aiohttp", specifier = ">=3.11.12,<4" },
@@ -3178,7 +3178,7 @@ requires-dist = [
     { name = "matplotlib", marker = "extra == 'viz'", specifier = ">=3.8.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8.0" },
     { name = "numpy", specifier = ">=1.26.0" },
-    { name = "pipecat-ai", extras = ["assemblyai", "aws", "azure", "cartesia", "deepgram", "elevenlabs", "fal", "gladia", "google", "gradium", "groq", "nvidia", "openai", "sambanova", "sarvam", "soniox", "speechmatics", "whisper", "silero", "soundfile"], editable = "../pipecat" },
+    { name = "pipecat-ai", extras = ["assemblyai", "aws", "azure", "cartesia", "deepgram", "elevenlabs", "fal", "gladia", "google", "gradium", "groq", "nvidia", "openai", "sambanova", "sarvam", "soniox", "speechmatics", "whisper", "silero", "soundfile"], editable = "../pipecat-2" },
     { name = "pydantic", specifier = ">=2.0.0" },
     { name = "pydantic-settings", specifier = ">=2.0.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },

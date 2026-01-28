@@ -44,7 +44,6 @@ class BenchmarkConfig(BaseSettings):
     sambanova_api_key: str = Field(default="", alias="SAMBANOVA_API_KEY")
     sarvam_api_key: str = Field(default="", alias="SARVAM_API_KEY")
     soniox_api_key: str = Field(default="", alias="SONIOX_API_KEY")
-    soniox_manual_api_key: str = Field(default="", alias="SONIOX_API_KEY")
     speechmatics_api_key: str = Field(default="", alias="SPEECHMATICS_API_KEY")
 
     # AWS credentials

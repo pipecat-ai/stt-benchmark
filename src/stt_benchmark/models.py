@@ -32,8 +32,8 @@ class ServiceName(str, Enum):
     SAMBANOVA = "sambanova"
     SARVAM = "sarvam"
     SPEECHMATICS = "speechmatics"
+    SPEECHMATICS_US = "speechmatics_us"
     SONIOX = "soniox"
-    SONIOX_MANUAL = "soniox_manual"
     WHISPER = "whisper"
 
 

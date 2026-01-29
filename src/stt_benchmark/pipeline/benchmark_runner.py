@@ -4,7 +4,6 @@ import asyncio
 from collections.abc import Callable
 from pathlib import Path
 
-import aiohttp
 from loguru import logger
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
@@ -14,8 +13,8 @@ from stt_benchmark.config import get_config
 from stt_benchmark.models import AudioSample, BenchmarkResult, ServiceName
 from stt_benchmark.observers.metrics_collector import MetricsCollectorObserver
 from stt_benchmark.observers.transcription_collector import TranscriptionCollectorObserver
-from stt_benchmark.pipeline.service_factory import create_stt_service, service_needs_aiohttp
 from stt_benchmark.pipeline.synthetic_transport import SyntheticInputTransport
+from stt_benchmark.services import create_stt_service
 
 
 class BenchmarkRunner:
@@ -87,18 +86,9 @@ class BenchmarkRunner:
         metrics_observer.set_current_sample(sample.sample_id)
         transcription_observer.set_current_sample(sample.sample_id)
 
-        # Create aiohttp session if needed
-        session: aiohttp.ClientSession | None = None
-        if service_needs_aiohttp(service_name):
-            session = aiohttp.ClientSession()
-
         try:
-            # Create STT service
-            stt_service = await create_stt_service(
-                service_name,
-                aiohttp_session=session,
-                model=model,
-            )
+            # Create STT service using its factory
+            stt_service = create_stt_service(service_name)
 
             # Create transport with audio
             # Pass transcription_received event so transport sends silence
@@ -179,7 +169,7 @@ class BenchmarkRunner:
             ttfb = metrics_observer.get_ttfb_for_sample(sample.sample_id)
 
             logger.debug(
-                f"[{service_name.value}] Sample {sample.sample_id}: " f"TTFB={ttfb:.3f}s"
+                f"[{service_name.value}] Sample {sample.sample_id}: TTFB={ttfb:.3f}s"
                 if ttfb
                 else "TTFB=N/A"
             )
@@ -202,11 +192,6 @@ class BenchmarkRunner:
                 audio_duration_seconds=sample.duration_seconds,
                 error=str(e),
             )
-
-        finally:
-            # Cleanup aiohttp session
-            if session:
-                await session.close()
 
     async def benchmark_batch(
         self,

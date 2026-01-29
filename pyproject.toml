@@ -97,4 +97,4 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 
  [tool.uv.sources]
-pipecat-ai = { path = "../pipecat", editable = true }
+pipecat-ai = { path = "../pipecat-2", editable = true }

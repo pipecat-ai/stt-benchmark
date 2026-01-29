@@ -6,7 +6,7 @@ A framework for benchmarking Speech-to-Text services with TTFS (Time To Final Se
 
 Benchmark results on 1000 samples from the `pipecat-ai/smart-turn-data-v3.1-train` dataset.
 
-| Service | Transcripts | E2E 0% WER | WER Mean | TTFS Median | TTFS P95 | TTFS P99 |
+| Service | Transcripts | Perfect | WER Mean | TTFS Median | TTFS P95 | TTFS P99 |
 |---------|-------------|------------|----------|-------------|----------|----------|
 | assemblyai | 99.8% | 65.2% | 3.86% | 326ms | 1476ms | 1936ms |
 | aws | 99.9% | 76.1% | 1.81% | 1105ms | 1513ms | 1924ms |
@@ -31,7 +31,7 @@ The Pareto frontier shows services that offer the best trade-off between latency
 | Metric | Description |
 |--------|-------------|
 | **Transcripts** | Percentage of samples where STT successfully returned a transcription |
-| **E2E 0% WER** | Perfect transcriptions (0% error) out of total benchmark runs |
+| **Perfect** | Perfect transcriptions (0% semantic WER) out of total benchmark runs |
 | **WER Mean** | Average semantic word error rate across all samples |
 | **TTFS Median** | Median time from user stops speaking to final transcription segment |
 | **TTFS P95** | 95th percentile TTFS - worst 5% of samples have latency above this |

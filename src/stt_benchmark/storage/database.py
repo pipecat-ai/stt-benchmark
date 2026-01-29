@@ -212,6 +212,58 @@ class Database:
         row = await cursor.fetchone()
         return row[0]
 
+    async def copy_samples_from(self, source_db_path: Path) -> int:
+        """Copy samples from another database if this one is empty.
+
+        Args:
+            source_db_path: Path to the source database to copy from.
+
+        Returns:
+            Number of samples copied (0 if samples already exist or source is empty).
+        """
+        # Check if we already have samples
+        current_count = await self.get_sample_count()
+        if current_count > 0:
+            logger.debug(f"Database already has {current_count} samples, skipping copy")
+            return 0
+
+        # Check if source exists
+        if not source_db_path.exists():
+            logger.debug(f"Source database {source_db_path} does not exist")
+            return 0
+
+        # Connect to source and copy samples
+        async with aiosqlite.connect(str(source_db_path)) as source_conn:
+            source_conn.row_factory = aiosqlite.Row
+            cursor = await source_conn.execute("SELECT * FROM samples")
+            rows = await cursor.fetchall()
+
+            if not rows:
+                logger.debug("Source database has no samples")
+                return 0
+
+            # Insert samples into this database
+            await self._conn.executemany(
+                """
+                INSERT OR REPLACE INTO samples (sample_id, audio_path, duration_seconds, language, dataset_index)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        row["sample_id"],
+                        row["audio_path"],
+                        row["duration_seconds"],
+                        row["language"],
+                        row["dataset_index"],
+                    )
+                    for row in rows
+                ],
+            )
+            await self._conn.commit()
+
+            logger.info(f"Copied {len(rows)} samples from {source_db_path}")
+            return len(rows)
+
     # ========== Result Operations ==========
 
     async def insert_result(self, result: BenchmarkResult) -> None:

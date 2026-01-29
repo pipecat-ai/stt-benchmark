@@ -8,6 +8,7 @@ from rich.console import Console
 from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, TimeElapsedColumn
 
 from stt_benchmark.analysis.statistics import compute_statistics, format_statistics_table
+from stt_benchmark.config import get_config
 from stt_benchmark.models import BenchmarkRun, ServiceName
 from stt_benchmark.pipeline.benchmark_runner import BenchmarkRunner
 from stt_benchmark.services import STT_SERVICES, parse_services_arg
@@ -57,6 +58,12 @@ def run_benchmark(
         "-v",
         help="VAD silence duration to trigger stop (seconds)",
     ),
+    test: bool = typer.Option(
+        False,
+        "--test",
+        "-t",
+        help="Use separate test database (test_results.db) to avoid affecting real data",
+    ),
 ):
     """Run STT TTFB benchmarks on configured services.
 
@@ -82,10 +89,25 @@ def run_benchmark(
         console.print(f"Sample limit: {limit}")
     console.print(f"Skip existing: {skip_existing}")
     console.print(f"VAD stop secs: {vad_stop_secs}")
+    if test:
+        console.print("[yellow]Test mode: using separate test database[/yellow]")
 
     async def run():
-        db = Database()
+        # Use test database if --test flag is set
+        config = get_config()
+        db_path = None
+        if test:
+            db_path = config.data_dir / "test_results.db"
+
+        db = Database(db_path=db_path)
         await db.initialize()
+
+        # If test mode, copy samples from main database if needed
+        if test:
+            main_db_path = config.results_db
+            copied = await db.copy_samples_from(main_db_path)
+            if copied > 0:
+                console.print(f"[dim]Copied {copied} samples from main database[/dim]")
 
         # Get samples
         samples = await db.get_all_samples()

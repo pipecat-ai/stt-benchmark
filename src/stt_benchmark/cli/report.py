@@ -8,6 +8,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from stt_benchmark.config import get_config
 from stt_benchmark.models import ServiceName
 from stt_benchmark.services import parse_service_name
 from stt_benchmark.storage.database import Database
@@ -51,6 +52,12 @@ def report(
         "-e",
         help="Show N worst samples (highest WER) for the specified service",
     ),
+    test: bool = typer.Option(
+        False,
+        "--test",
+        "-t",
+        help="Use test database (test_results.db) instead of main database",
+    ),
 ):
     """Generate benchmark reports.
 
@@ -67,28 +74,37 @@ def report(
     """
     console.print("\n[bold blue]STT Benchmark - Report[/bold blue]\n")
 
+    if test:
+        console.print("[yellow]Using test database[/yellow]\n")
+
     # If --errors is specified, --service is required
     if errors is not None and service is None:
         console.print("[red]--errors requires --service to be specified[/red]")
         raise typer.Exit(1)
 
+    # Determine database path
+    db_path = None
+    if test:
+        config = get_config()
+        db_path = config.data_dir / "test_results.db"
+
     if service is None:
         # Default: show summary of all services
-        asyncio.run(_show_all_services_summary())
+        asyncio.run(_show_all_services_summary(db_path))
     elif errors is not None:
         # Show worst samples for a service
         service_name = parse_service(service)
-        asyncio.run(_show_worst_samples(service_name, model, errors))
+        asyncio.run(_show_worst_samples(service_name, model, errors, db_path))
     else:
         # Generate detailed report for a single service
         service_name = parse_service(service)
         output_path = Path(output_dir)
-        asyncio.run(_generate_detailed_report(service_name, model, output_path))
+        asyncio.run(_generate_detailed_report(service_name, model, output_path, db_path))
 
 
-async def _show_all_services_summary():
+async def _show_all_services_summary(db_path: Path | None = None):
     """Show summary table of all benchmarked services."""
-    db = Database()
+    db = Database(db_path=db_path)
     await db.initialize()
 
     # Get all services with results (not just WER)
@@ -240,9 +256,11 @@ async def _show_all_services_summary():
     console.print("[dim]Use --service <name> to generate detailed reports for a service.[/dim]")
 
 
-async def _show_worst_samples(service_name: ServiceName, model_name: str | None, limit: int):
+async def _show_worst_samples(
+    service_name: ServiceName, model_name: str | None, limit: int, db_path: Path | None = None
+):
     """Show the worst N samples for a service."""
-    db = Database()
+    db = Database(db_path=db_path)
     await db.initialize()
 
     report_data = await db.get_report_data(service_name, model_name)
@@ -289,10 +307,13 @@ async def _show_worst_samples(service_name: ServiceName, model_name: str | None,
 
 
 async def _generate_detailed_report(
-    service_name: ServiceName, model_name: str | None, output_path: Path
+    service_name: ServiceName,
+    model_name: str | None,
+    output_path: Path,
+    db_path: Path | None = None,
 ):
     """Generate detailed report files for a single service."""
-    db = Database()
+    db = Database(db_path=db_path)
     await db.initialize()
 
     # Check if we have data

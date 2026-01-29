@@ -70,12 +70,14 @@ uv run stt-benchmark run [OPTIONS]
 | `-m, --model` | TEXT | - | Model name override |
 | `--skip-existing/--no-skip-existing` | BOOL | True | Skip already benchmarked samples |
 | `-v, --vad-stop-secs` | FLOAT | 0.2 | VAD silence duration to trigger stop |
+| `-t, --test` | BOOL | False | Use separate test database to avoid affecting real data |
 
 ### Available Services
 
 ```
-deepgram, assemblyai, openai, groq, gladia, elevenlabs, 
-cartesia, google, azure, aws, speechmatics, soniox, whisper
+assemblyai, aws, azure, cartesia, deepgram, elevenlabs, fal,
+gladia, google, gradium, groq, nvidia, openai, sambanova,
+sarvam, soniox, speechmatics, whisper
 ```
 
 ### Examples
@@ -98,6 +100,12 @@ uv run stt-benchmark run --services deepgram --no-skip-existing
 
 # Adjust VAD sensitivity (shorter = faster, longer = more accurate)
 uv run stt-benchmark run --services deepgram --vad-stop-secs 0.3
+
+# Test service configurations without affecting real data
+uv run stt-benchmark run --test --limit 1 --no-skip-existing
+
+# Test specific services
+uv run stt-benchmark run --test -s deepgram,gladia,gradium --limit 1
 ```
 
 ---
@@ -287,6 +295,7 @@ uv run stt-benchmark report [OPTIONS]
 | `-o, --output` | TEXT | stt_benchmark_data | Output directory for report files |
 | `-m, --model` | TEXT | - | Model name filter |
 | `-e, --errors` | INT | - | Show N worst samples (requires --service) |
+| `-t, --test` | BOOL | False | Use test database (test_results.db) instead of main database |
 
 ### Examples
 
@@ -302,6 +311,9 @@ uv run stt-benchmark report --service deepgram --errors 10
 
 # Custom output directory
 uv run stt-benchmark report --service deepgram --output ./reports
+
+# View results from test database
+uv run stt-benchmark report --test
 ```
 
 ### Output Formats
@@ -334,6 +346,31 @@ uv run stt-benchmark report --service deepgram --output ./reports
 | ... | See README for full list |
 
 Variables can be set in a `.env` file in the project root.
+
+---
+
+## Testing Service Configurations
+
+Use the `--test` flag to validate service configurations without affecting your real benchmark data. This uses a separate `test_results.db` database.
+
+```bash
+# 1. Test all available services with 1 sample each
+uv run stt-benchmark run --test --limit 1 --no-skip-existing
+
+# 2. Or test specific services
+uv run stt-benchmark run --test -s deepgram,gladia,gradium --limit 1
+
+# 3. View test results
+uv run stt-benchmark report --test
+
+# 4. Clean up when done (optional)
+rm ./stt_benchmark_data/test_results.db
+```
+
+This is useful when:
+- Setting up new service configurations
+- Verifying API keys and endpoints work
+- Testing changes to `services.py` factory functions
 
 ---
 

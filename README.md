@@ -18,7 +18,7 @@ Benchmark results on 1000 samples from the `pipecat-ai/smart-turn-data-v3.1-trai
 | google | 100.0% | 67.8% | 3.14% | 863ms | 1132ms | 1522ms |
 | openai | 100.0% | 74.8% | 3.70% | 852ms | 1413ms | 1806ms |
 | soniox | 100.0% | 78.8% | 2.06% | 454ms | 853ms | 1166ms |
-| speechmatics | 99.9% | 80.8% | 1.81% | 543ms | 743ms | 813ms |
+| speechmatics | 99.8% | 80.8% | 1.61% | 486ms | 678ms | 737ms |
 
 ### Latency vs Accuracy Trade-off
 

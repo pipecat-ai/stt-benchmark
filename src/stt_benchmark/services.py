@@ -187,13 +187,6 @@ STT_SERVICES: dict[str, STTServiceConfig] = {
         pipecat_class="SpeechmaticsSTTService",
         default_model=None,
     ),
-    "speechmatics_us": STTServiceConfig(
-        name="speechmatics_us",
-        api_key_env="SPEECHMATICS_API_KEY",
-        pipecat_module="pipecat.services.speechmatics.stt",
-        pipecat_class="SpeechmaticsSTTService",
-        default_model=None,
-    ),
     "whisper": STTServiceConfig(
         name="whisper",
         pipecat_module="pipecat.services.whisper.stt",

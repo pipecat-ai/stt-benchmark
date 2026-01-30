@@ -17,6 +17,7 @@ uv run stt-benchmark [COMMAND] [OPTIONS]
 | `ground-truth` | Generate/manage ground truth transcriptions |
 | `wer` | Calculate Semantic WER metrics |
 | `report` | Generate and view benchmark reports |
+| `export` | Export data for a specific service (for provider verification) |
 
 ---
 
@@ -335,6 +336,85 @@ uv run stt-benchmark report --test
 
 ---
 
+## export
+
+Export benchmark data for a specific service, enabling providers to independently verify WER results.
+
+```bash
+uv run stt-benchmark export <SERVICE> [OPTIONS]
+```
+
+### Arguments
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `SERVICE` | TEXT | Service name to export data for (required) |
+
+### Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `-o, --output` | TEXT | ./export_{service} | Output directory |
+| `-m, --model` | TEXT | - | Model name filter |
+| `-f, --format` | TEXT | all | Export format: csv, json, or all |
+
+### Examples
+
+```bash
+# Export all data for deepgram
+uv run stt-benchmark export deepgram
+
+# Export to a specific directory
+uv run stt-benchmark export deepgram -o ./deepgram_verification
+
+# Export only CSV format
+uv run stt-benchmark export deepgram --format csv
+
+# Export for a specific model
+uv run stt-benchmark export deepgram --model nova-3
+```
+
+### Output Files
+
+When using `--format all` (default), the export creates:
+
+| File | Description |
+|------|-------------|
+| `{service}_results.csv` | All results in CSV format |
+| `{service}_results.json` | All results in JSON format with metadata |
+| `README.md` | Verification instructions for the provider |
+
+### Exported Data Fields
+
+| Field | Description |
+|-------|-------------|
+| `sample_id` | Unique identifier for the audio sample |
+| `dataset_index` | Index in the source dataset |
+| `audio_duration_seconds` | Duration of the audio sample |
+| `ground_truth` | Ground truth transcription |
+| `transcription` | Transcription returned by the service |
+| `normalized_reference` | Normalized ground truth (for WER calculation) |
+| `normalized_hypothesis` | Normalized transcription (for WER calculation) |
+| `wer` | Semantic Word Error Rate |
+| `substitutions` | Number of word substitutions |
+| `deletions` | Number of word deletions |
+| `insertions` | Number of word insertions |
+| `reference_words` | Total words in normalized reference |
+| `ttfb_seconds` | Time to first byte (latency) |
+
+### Use Case: Provider Verification
+
+When a provider disputes WER results, export their data so they can:
+
+1. **Verify transcriptions** - Compare against their service logs
+2. **Verify ground truth** - Listen to samples and check accuracy
+3. **Recalculate WER** - Use their own methodology on normalized text
+4. **Identify disputes** - Reference specific `sample_id` values
+
+This approach is transparent (providers see exactly what was measured) while being fair (no competitor data is shared).
+
+---
+
 ## Environment Variables
 
 | Variable | Required For |
@@ -396,4 +476,7 @@ uv run stt-benchmark wer
 # 6. View results
 uv run stt-benchmark report
 uv run stt-benchmark report --service deepgram --errors 5
+
+# 7. (Optional) Export data for provider verification
+uv run stt-benchmark export deepgram -o ./deepgram_verification
 ```

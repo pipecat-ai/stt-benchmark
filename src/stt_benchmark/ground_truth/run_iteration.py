@@ -110,7 +110,7 @@ async def run_iteration(
         if progress_callback:
             progress_callback(i, len(samples), sample.sample_id)
 
-        logger.info(f"[{i+1}/{len(samples)}] Transcribing {sample.sample_id}...")
+        logger.info(f"[{i + 1}/{len(samples)}] Transcribing {sample.sample_id}...")
 
         try:
             gt = await transcriber.transcribe_sample(sample)
@@ -256,3 +256,19 @@ def load_existing_notes(notes_path: Path) -> dict[str, dict]:
                 if record["type"] == "review":
                     notes[record["sample_id"]] = record
     return notes
+
+
+def load_existing_edits(notes_path: Path) -> dict[str, dict]:
+    """Load existing edits if any, returning a dict keyed by sample_id.
+
+    If multiple edits exist for a sample, returns the most recent one.
+    """
+    edits = {}
+    if notes_path.exists():
+        with open(notes_path) as f:
+            for line in f:
+                record = json.loads(line.strip())
+                if record["type"] == "edit":
+                    # Later edits override earlier ones
+                    edits[record["sample_id"]] = record
+    return edits

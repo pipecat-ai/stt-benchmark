@@ -116,6 +116,17 @@ class GroundTruth(BaseModel):
     )
     generated_at: datetime = Field(default_factory=_utcnow)
 
+    # Human verification fields
+    verified_by: str | None = Field(
+        default=None, description="Who verified/corrected this transcription (e.g., 'human')"
+    )
+    verified_at: datetime | None = Field(
+        default=None, description="When the transcription was verified/corrected"
+    )
+    original_text: str | None = Field(
+        default=None, description="Original AI-generated text if human-corrected"
+    )
+
 
 class SemanticError(BaseModel):
     """A semantically meaningful transcription error."""

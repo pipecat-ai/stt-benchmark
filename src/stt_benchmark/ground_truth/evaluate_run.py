@@ -15,6 +15,7 @@ from pathlib import Path
 
 from stt_benchmark.config import get_config
 from stt_benchmark.ground_truth.run_iteration import (
+    load_existing_edits,
     load_existing_notes,
     load_run,
 )
@@ -60,12 +61,31 @@ def save_review(notes_path: Path, sample_id: str, status: str, note: str | None)
         f.write(json.dumps(record) + "\n")
 
 
+def save_edit(
+    notes_path: Path,
+    sample_id: str,
+    original_text: str,
+    corrected_text: str,
+):
+    """Append an edit record to the notes file."""
+    record = {
+        "type": "edit",
+        "sample_id": sample_id,
+        "original_text": original_text,
+        "corrected_text": corrected_text,
+        "edited_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    }
+    with open(notes_path, "a") as f:
+        f.write(json.dumps(record) + "\n")
+
+
 def display_sample(
     index: int,
     total: int,
     sample: dict,
     stats: dict,
     existing_review: dict | None = None,
+    existing_edit: dict | None = None,
 ):
     """Display a sample for review."""
     clear_screen()
@@ -84,8 +104,16 @@ def display_sample(
         print(f"ERROR: {error}")
         print()
 
-    print("Transcription:")
-    print(f'"{transcription}"')
+    # Show current transcription (use edited version if available)
+    if existing_edit:
+        print("Original transcription:")
+        print(f'  "{transcription}"')
+        print()
+        print("✓ Corrected transcription:")
+        print(f'  "{existing_edit["corrected_text"]}"')
+    else:
+        print("Transcription:")
+        print(f'"{transcription}"')
     print()
 
     if existing_review:
@@ -95,10 +123,11 @@ def display_sample(
         print()
 
     print("-" * 70)
-    print("[p] Play  [r] Replay  [a] Approve   [n] Note  [Enter] Next  [q] Quit")
+    print("[p] Play  [r] Replay  [e] Edit  [a] Approve  [n] Note  [Enter] Next  [q] Quit")
     print("-" * 70)
     print(
-        f"Progress: {stats['approved']} approved, {stats['noted']} noted, {stats['skipped']} skipped"
+        f"Progress: {stats['approved']} approved, {stats['edited']} edited, "
+        f"{stats['noted']} noted, {stats['skipped']} skipped"
     )
 
 
@@ -122,10 +151,13 @@ def run_evaluation(run_path: Path):
     # Set up notes file
     notes_path = run_path.parent / f"{run_id}_notes.jsonl"
 
-    # Load existing notes
+    # Load existing notes and edits
     existing_notes = load_existing_notes(notes_path)
+    existing_edits = load_existing_edits(notes_path)
     if existing_notes:
         print(f"Found {len(existing_notes)} existing reviews")
+    if existing_edits:
+        print(f"Found {len(existing_edits)} existing edits")
 
     # Write header if new notes file
     if not notes_path.exists():
@@ -139,13 +171,16 @@ def run_evaluation(run_path: Path):
             f.write(json.dumps(header_record) + "\n")
 
     # Stats
-    stats = {"approved": 0, "noted": 0, "skipped": 0}
+    stats = {"approved": 0, "edited": 0, "noted": 0, "skipped": 0}
 
     # Count existing reviews
     for note in existing_notes.values():
         status = note.get("status", "skipped")
         if status in stats:
             stats[status] += 1
+
+    # Count existing edits
+    stats["edited"] = len(existing_edits)
 
     # Find first unreviewed sample
     start_index = 0
@@ -165,9 +200,11 @@ def run_evaluation(run_path: Path):
             sample = samples[i]
             sample_id = sample["sample_id"]
             audio_path = sample["audio_path"]
+            transcription = sample.get("transcription", "")
 
             existing_review = existing_notes.get(sample_id)
-            display_sample(i, len(samples), sample, stats, existing_review)
+            existing_edit = existing_edits.get(sample_id)
+            display_sample(i, len(samples), sample, stats, existing_review, existing_edit)
 
             while True:
                 key = readchar.readkey()
@@ -182,6 +219,36 @@ def run_evaluation(run_path: Path):
                         current_process = play_audio(audio_path)
                     else:
                         print(f"\nAudio file not found: {audio_path}")
+
+                elif key == "e":
+                    # Edit transcription
+                    current_text = (
+                        existing_edit["corrected_text"] if existing_edit else transcription
+                    )
+                    print(f'\nCurrent: "{current_text}"')
+                    print("New transcription (or press Enter to cancel): ", end="", flush=True)
+                    new_text = input().strip()
+
+                    if new_text and new_text != current_text:
+                        save_edit(notes_path, sample_id, transcription, new_text)
+                        existing_edits[sample_id] = {
+                            "original_text": transcription,
+                            "corrected_text": new_text,
+                        }
+                        if sample_id not in [e for e in existing_edits if e != sample_id]:
+                            stats["edited"] += 1
+                        print("✓ Saved correction")
+                        # Also mark as approved since they reviewed it
+                        save_review(notes_path, sample_id, "approved", "edited")
+                        existing_notes[sample_id] = {"status": "approved", "note": "edited"}
+                        stats["approved"] += 1
+                        i += 1
+                        break
+                    else:
+                        # Cancelled or same text, redisplay
+                        display_sample(
+                            i, len(samples), sample, stats, existing_review, existing_edit
+                        )
 
                 elif key == "a":
                     # Approve
@@ -227,6 +294,7 @@ def run_evaluation(run_path: Path):
         "type": "summary",
         "total": len(samples),
         "approved": stats["approved"],
+        "edited": stats["edited"],
         "noted": stats["noted"],
         "skipped": stats["skipped"],
         "completed_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
@@ -241,6 +309,7 @@ def run_evaluation(run_path: Path):
     print()
     print(f"Total samples: {len(samples)}")
     print(f"Approved: {stats['approved']}")
+    print(f"Edited: {stats['edited']}")
     print(f"Noted: {stats['noted']}")
     print(f"Skipped: {stats['skipped']}")
     print()

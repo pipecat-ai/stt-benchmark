@@ -225,16 +225,20 @@ def review_command(
 ):
     """Interactive review of transcription runs with audio playback.
 
-    Listen to audio samples and approve/note transcriptions.
+    Listen to audio samples, approve, edit, or flag transcriptions.
     Requires ffplay (from ffmpeg) for audio playback.
 
     Controls:
       [p] Play audio
       [r] Replay audio
+      [e] Edit transcription (correct errors)
       [a] Approve transcription
       [n] Add note (flag for review)
       [Enter] Skip to next
       [q] Quit
+
+    Human corrections made with [e] are saved to a notes file and will be
+    automatically applied when importing with 'ground-truth import'.
     """
     from stt_benchmark.ground_truth.evaluate_run import get_run_path, run_evaluation
 
@@ -258,6 +262,108 @@ def review_command(
     run_evaluation(run_path)
 
 
+@app.command("edit")
+def edit_command(
+    sample_id: str = typer.Argument(
+        ...,
+        help="Sample ID to edit (can be partial, will match prefix)",
+    ),
+    text: str | None = typer.Option(
+        None,
+        "--text",
+        "-t",
+        help="New transcription text (interactive if not provided)",
+    ),
+):
+    """Edit ground truth for a sample directly in the database.
+
+    Use this to correct ground truth that has already been imported.
+    The original AI-generated text is preserved for reference.
+
+    Examples:
+      stt-benchmark ground-truth edit f3464b75 --text "Resume playing"
+      stt-benchmark ground-truth edit f3464b75  # Interactive mode
+    """
+    console.print("\n[bold blue]STT Benchmark - Edit Ground Truth[/bold blue]\n")
+
+    async def run():
+        db = Database()
+        await db.initialize()
+
+        # Find matching sample
+        samples = await db.get_all_samples()
+        matching = [s for s in samples if s.sample_id.startswith(sample_id)]
+
+        if not matching:
+            console.print(f"[red]No sample found matching: {sample_id}[/red]")
+            await db.close()
+            raise typer.Exit(1)
+
+        if len(matching) > 1:
+            console.print(f"[yellow]Multiple samples match '{sample_id}':[/yellow]")
+            for s in matching[:10]:
+                console.print(f"  {s.sample_id}")
+            if len(matching) > 10:
+                console.print(f"  ... and {len(matching) - 10} more")
+            console.print("\nPlease provide a more specific ID.")
+            await db.close()
+            raise typer.Exit(1)
+
+        sample = matching[0]
+        console.print(f"Sample: {sample.sample_id}")
+        console.print(f"Duration: {sample.duration_seconds:.1f}s")
+        console.print()
+
+        # Get current ground truth
+        gt = await db.get_ground_truth(sample.sample_id)
+        if not gt:
+            console.print("[red]No ground truth found for this sample.[/red]")
+            console.print("Run 'ground-truth' or 'ground-truth import' first.")
+            await db.close()
+            raise typer.Exit(1)
+
+        console.print(f'Current text: "{gt.text}"')
+        if gt.original_text:
+            console.print(f'[dim]Original AI text: "{gt.original_text}"[/dim]')
+        if gt.verified_by:
+            console.print(f"[dim]Previously verified by: {gt.verified_by}[/dim]")
+        console.print()
+
+        # Get new text
+        new_text = text
+        if new_text is None:
+            console.print("Enter new transcription (or press Enter to cancel):")
+            new_text = input().strip()
+
+        if not new_text:
+            console.print("[yellow]Cancelled.[/yellow]")
+            await db.close()
+            return
+
+        if new_text == gt.text:
+            console.print("[yellow]Text unchanged.[/yellow]")
+            await db.close()
+            return
+
+        # Update the ground truth
+        success = await db.update_ground_truth_text(
+            sample.sample_id,
+            new_text,
+            verified_by="human",
+        )
+
+        if success:
+            console.print("\n[green]✓ Updated ground truth[/green]")
+            console.print(f'  Old: "{gt.text}"')
+            console.print(f'  New: "{new_text}"')
+        else:
+            console.print("[red]Failed to update ground truth.[/red]")
+
+        await db.close()
+
+    asyncio.run(run())
+
+
 @app.command("import")
 def import_command(
     jsonl_file: str = typer.Argument(
@@ -278,11 +384,15 @@ def import_command(
 
     The JSONL file should be from 'ground-truth iterate' command output.
     Only samples that exist in the local database will be imported.
+
+    If a corresponding _notes.jsonl file exists with human corrections,
+    those corrections will be applied automatically.
     """
     import json
     from datetime import datetime
     from pathlib import Path
 
+    from stt_benchmark.ground_truth.run_iteration import load_existing_edits
     from stt_benchmark.models import GroundTruth
 
     jsonl_path = Path(jsonl_file)
@@ -292,6 +402,16 @@ def import_command(
 
     console.print("\n[bold blue]STT Benchmark - Import Ground Truth[/bold blue]\n")
     console.print(f"File: {jsonl_path}")
+
+    # Check for notes file with human corrections
+    run_id = jsonl_path.stem
+    notes_path = jsonl_path.parent / f"{run_id}_notes.jsonl"
+    human_edits: dict[str, dict] = {}
+
+    if notes_path.exists():
+        human_edits = load_existing_edits(notes_path)
+        if human_edits:
+            console.print(f"[cyan]Found {len(human_edits)} human corrections in notes file[/cyan]")
 
     async def run():
         db = Database()
@@ -309,6 +429,7 @@ def import_command(
 
         # Read JSONL file
         imported = 0
+        imported_with_corrections = 0
         skipped_no_sample = 0
         skipped_existing = 0
         header_info = None
@@ -351,17 +472,45 @@ def import_command(
                 else:
                     generated_at = datetime.utcnow()
 
-                # Create and insert ground truth
-                gt = GroundTruth(
-                    sample_id=sample_id,
-                    text=transcription,
-                    model_used=header_info.get("model", "unknown") if header_info else "unknown",
-                    generated_at=generated_at,
-                )
+                # Check for human correction
+                human_edit = human_edits.get(sample_id)
+                if human_edit:
+                    # Use the human-corrected text
+                    corrected_text = human_edit.get("corrected_text", transcription)
+                    edited_at_str = human_edit.get("edited_at")
+                    verified_at = None
+                    if edited_at_str:
+                        verified_at = datetime.fromisoformat(edited_at_str.replace("Z", "+00:00"))
+
+                    gt = GroundTruth(
+                        sample_id=sample_id,
+                        text=corrected_text,
+                        model_used=header_info.get("model", "unknown")
+                        if header_info
+                        else "unknown",
+                        generated_at=generated_at,
+                        verified_by="human",
+                        verified_at=verified_at,
+                        original_text=transcription,  # Store original AI transcription
+                    )
+                    imported_with_corrections += 1
+                else:
+                    # Use the AI transcription as-is
+                    gt = GroundTruth(
+                        sample_id=sample_id,
+                        text=transcription,
+                        model_used=header_info.get("model", "unknown")
+                        if header_info
+                        else "unknown",
+                        generated_at=generated_at,
+                    )
+
                 await db.insert_ground_truth(gt)
                 imported += 1
 
         console.print(f"\n[green]✓ Imported {imported} ground truth transcriptions[/green]")
+        if imported_with_corrections:
+            console.print(f"[cyan]  ({imported_with_corrections} with human corrections)[/cyan]")
         if skipped_existing:
             console.print(
                 f"[yellow]Skipped {skipped_existing} (already exist, use --force to overwrite)[/yellow]"

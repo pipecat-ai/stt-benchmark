@@ -132,9 +132,10 @@ uv run stt-benchmark ground-truth [OPTIONS] [SUBCOMMAND]
 | Subcommand | Description |
 |------------|-------------|
 | `iterate` | Run a repeatable transcription iteration (saves to JSONL) |
-| `import` | Import ground truth from a JSONL file |
 | `list` | List available transcription runs |
-| `review` | Interactive review with audio playback |
+| `review` | Interactive review with audio playback and editing |
+| `edit` | Edit ground truth for a specific sample in the database |
+| `import` | Import ground truth from a JSONL file (with human corrections) |
 
 ### Examples
 
@@ -186,6 +187,22 @@ uv run stt-benchmark ground-truth import /path/to/2026-01-03_17-00-06.jsonl
 uv run stt-benchmark ground-truth import /path/to/file.jsonl --force
 ```
 
+**Human Corrections:**
+
+If a corresponding `<run_id>_notes.jsonl` file exists (from running `review` with edits), human corrections are automatically applied:
+
+```bash
+$ uv run stt-benchmark ground-truth import 2026-01-20_14-30-00.jsonl
+Found 12 human corrections in notes file
+✓ Imported 100 ground truth transcriptions
+  (12 with human corrections)
+```
+
+The import stores:
+- The corrected text as the ground truth
+- The original AI text for reference
+- Verification metadata (`verified_by: human`, timestamp)
+
 Only samples that exist in your local database will be imported.
 Samples not yet downloaded will be skipped.
 
@@ -209,7 +226,7 @@ Output:
 
 ### review
 
-Interactive review of transcription runs with audio playback.
+Interactive review of transcription runs with audio playback and editing.
 
 ```bash
 uv run stt-benchmark ground-truth review <run_id>
@@ -222,6 +239,7 @@ uv run stt-benchmark ground-truth review <run_id>
 | Key | Action |
 |-----|--------|
 | `p` / `r` | Play / Replay audio |
+| `e` | Edit transcription (correct errors) |
 | `a` | Approve transcription |
 | `n` | Add note (flag for review) |
 | `Enter` | Skip to next |
@@ -231,6 +249,56 @@ uv run stt-benchmark ground-truth review <run_id>
 # Review a specific run
 uv run stt-benchmark ground-truth review 2026-01-20_14-30-00
 ```
+
+**Batch Review & Resume:**
+
+You can review samples in batches - progress is saved automatically:
+
+```bash
+# Session 1: Review some samples, then press 'q' to quit
+uv run stt-benchmark ground-truth review 2026-01-20_14-30-00
+# ... review samples 1-50, then quit
+
+# Session 2: Automatically resumes where you left off
+uv run stt-benchmark ground-truth review 2026-01-20_14-30-00
+# Found 50 existing reviews
+# Found 3 existing edits
+# Starting from sample 51
+```
+
+**How Edits Work:**
+
+1. Edits are saved to a separate `<run_id>_notes.jsonl` file
+2. Original AI transcriptions are preserved
+3. When you run `import`, human corrections are automatically applied
+4. You can re-import with `--force` to apply additional corrections
+
+### edit
+
+Edit ground truth for a specific sample directly in the database.
+
+```bash
+uv run stt-benchmark ground-truth edit <SAMPLE_ID> [OPTIONS]
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--text, -t` | TEXT | - | New transcription (interactive if not provided) |
+
+Use this for samples already imported into the database.
+
+```bash
+# Interactive mode - will prompt for new text
+uv run stt-benchmark ground-truth edit f3464b75
+
+# Direct mode - provide text on command line
+uv run stt-benchmark ground-truth edit f3464b75 --text "Resume playing"
+
+# Partial sample IDs work (matches prefix)
+uv run stt-benchmark ground-truth edit f346 --text "Resume playing"
+```
+
+The original AI-generated text is preserved in the database for reference.
 
 ---
 
@@ -463,20 +531,38 @@ uv run stt-benchmark download --num-samples 100
 # 2. Run benchmarks
 uv run stt-benchmark run --services deepgram,openai,groq
 
-# 3. Generate ground truth
-uv run stt-benchmark ground-truth
+# 3. Generate ground truth (AI transcription)
+uv run stt-benchmark ground-truth iterate --samples 100
 
-# 4. (Optional) Review and correct ground truth
+# 4. Review and correct ground truth (can be done in batches)
 uv run stt-benchmark ground-truth list
 uv run stt-benchmark ground-truth review <run_id>
+# Press [e] to edit when you hear errors, [a] to approve, [q] to quit
+# Resume later - progress is saved automatically
 
-# 5. Calculate semantic WER
+# 5. Import ground truth with human corrections
+uv run stt-benchmark ground-truth import <run_id>.jsonl
+
+# 6. Calculate semantic WER
 uv run stt-benchmark wer
 
-# 6. View results
+# 7. View results
 uv run stt-benchmark report
 uv run stt-benchmark report --service deepgram --errors 5
 
-# 7. (Optional) Export data for provider verification
+# 8. (Optional) Export data for provider verification
 uv run stt-benchmark export deepgram -o ./deepgram_verification
+```
+
+### Correcting Ground Truth After Import
+
+If you find errors in already-imported ground truth:
+
+```bash
+# Edit a specific sample directly in the database
+uv run stt-benchmark ground-truth edit <sample_id> --text "Correct transcription"
+
+# Or re-review and re-import with --force
+uv run stt-benchmark ground-truth review <run_id>
+uv run stt-benchmark ground-truth import <run_id>.jsonl --force
 ```

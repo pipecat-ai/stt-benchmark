@@ -1,7 +1,7 @@
 """SQLite storage for benchmark results."""
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import aiosqlite
@@ -82,7 +82,10 @@ class Database:
                 sample_id TEXT PRIMARY KEY REFERENCES samples(sample_id),
                 text TEXT NOT NULL,
                 model_used TEXT NOT NULL DEFAULT 'gemini-3-flash-preview',
-                generated_at TEXT NOT NULL
+                generated_at TEXT NOT NULL,
+                verified_by TEXT,
+                verified_at TEXT,
+                original_text TEXT
             );
 
             -- Semantic WER metrics table
@@ -136,6 +139,32 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_traces_service ON semantic_wer_traces(service_name);
             """
         )
+        await self._conn.commit()
+
+        # Run migrations for existing databases
+        await self._run_migrations()
+
+    async def _run_migrations(self) -> None:
+        """Run schema migrations for existing databases."""
+        # Migration: Add verification columns to ground_truth table
+        try:
+            await self._conn.execute("ALTER TABLE ground_truth ADD COLUMN verified_by TEXT")
+            logger.debug("Added verified_by column to ground_truth")
+        except Exception:
+            pass  # Column already exists
+
+        try:
+            await self._conn.execute("ALTER TABLE ground_truth ADD COLUMN verified_at TEXT")
+            logger.debug("Added verified_at column to ground_truth")
+        except Exception:
+            pass  # Column already exists
+
+        try:
+            await self._conn.execute("ALTER TABLE ground_truth ADD COLUMN original_text TEXT")
+            logger.debug("Added original_text column to ground_truth")
+        except Exception:
+            pass  # Column already exists
+
         await self._conn.commit()
 
     async def close(self) -> None:
@@ -424,12 +453,64 @@ class Database:
         """Insert a ground truth transcription."""
         await self._conn.execute(
             """
-            INSERT OR REPLACE INTO ground_truth (sample_id, text, model_used, generated_at)
-            VALUES (?, ?, ?, ?)
+            INSERT OR REPLACE INTO ground_truth
+            (sample_id, text, model_used, generated_at, verified_by, verified_at, original_text)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (gt.sample_id, gt.text, gt.model_used, gt.generated_at.isoformat()),
+            (
+                gt.sample_id,
+                gt.text,
+                gt.model_used,
+                gt.generated_at.isoformat(),
+                gt.verified_by,
+                gt.verified_at.isoformat() if gt.verified_at else None,
+                gt.original_text,
+            ),
         )
         await self._conn.commit()
+
+    async def update_ground_truth_text(
+        self,
+        sample_id: str,
+        new_text: str,
+        verified_by: str = "human",
+    ) -> bool:
+        """Update ground truth text with human correction.
+
+        Preserves the original AI-generated text and marks as verified.
+
+        Args:
+            sample_id: Sample to update
+            new_text: The corrected transcription
+            verified_by: Who made the correction
+
+        Returns:
+            True if updated, False if sample not found
+        """
+        # Get existing ground truth
+        existing = await self.get_ground_truth(sample_id)
+        if not existing:
+            return False
+
+        # Store original text if this is the first correction
+        original_text = existing.original_text or existing.text
+
+        await self._conn.execute(
+            """
+            UPDATE ground_truth
+            SET text = ?, verified_by = ?, verified_at = ?, original_text = ?
+            WHERE sample_id = ?
+            """,
+            (
+                new_text,
+                verified_by,
+                datetime.now(timezone.utc).isoformat(),
+                original_text,
+                sample_id,
+            ),
+        )
+        await self._conn.commit()
+        return True
 
     async def get_ground_truth(self, sample_id: str) -> GroundTruth | None:
         """Get ground truth for a sample."""
@@ -443,6 +524,11 @@ class Database:
                 text=row["text"],
                 model_used=row["model_used"],
                 generated_at=datetime.fromisoformat(row["generated_at"]),
+                verified_by=row["verified_by"],
+                verified_at=datetime.fromisoformat(row["verified_at"])
+                if row["verified_at"]
+                else None,
+                original_text=row["original_text"],
             )
         return None
 

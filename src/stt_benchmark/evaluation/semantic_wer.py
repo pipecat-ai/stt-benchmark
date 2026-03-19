@@ -12,6 +12,7 @@ Only counts errors that would impact how an LLM agent understands
 and responds to the user. Full reasoning traces are stored for debugging.
 """
 
+import asyncio
 import json
 import time
 import uuid
@@ -362,15 +363,68 @@ class SemanticWEREvaluator:
         self,
         model: str = "claude-sonnet-4-5-20250929",
         db_path: Path | None = None,
+        max_concurrency: int = 50,
     ):
         self.config = get_config()
         self.model = model
         self.db = Database(db_path=db_path)
+        self._api_semaphore = asyncio.Semaphore(max_concurrency)
 
         if not self.config.anthropic_api_key:
             raise ValueError("ANTHROPIC_API_KEY not set in environment")
 
         self.client = anthropic.AsyncAnthropic(api_key=self.config.anthropic_api_key)
+
+    async def warm_cache(self) -> None:
+        """Send a minimal request to warm the prompt cache.
+
+        Establishes the cache for the system prompt and tool definition
+        before any real evaluation requests are sent.  This ensures all
+        concurrent evaluation requests get cache hits.
+        """
+        response = await self.client.messages.create(
+            model=self.model,
+            max_tokens=1,
+            system=[
+                {
+                    "type": "text",
+                    "text": SEMANTIC_WER_SYSTEM_PROMPT,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
+            tools=[CALCULATE_WER_TOOL],
+            messages=[{"role": "user", "content": "."}],
+        )
+        logger.info(
+            f"Prompt cache warmed ({getattr(response.usage, 'cache_creation_input_tokens', 0) or 0:,} tokens written)"
+        )
+
+    async def _api_call(
+        self,
+        request_payload: dict,
+        filename: str,
+        max_retries: int = 5,
+    ) -> anthropic.types.Message:
+        """Make a single API call with concurrency control and retry.
+
+        Acquires the global semaphore before calling the API, and retries
+        on rate-limit (429) and server (5xx) errors with exponential
+        backoff.
+        """
+        for attempt in range(1, max_retries + 1):
+            try:
+                return await self.client.messages.create(**request_payload)
+            except (anthropic.RateLimitError, anthropic.InternalServerError) as e:
+                label = "rate limited" if isinstance(e, anthropic.RateLimitError) else "server error"
+                if attempt == max_retries:
+                    raise
+                wait = 15 * (2 ** (attempt - 1))
+                logger.warning(
+                    f"{filename}: {label}, waiting {wait}s "
+                    f"(attempt {attempt}/{max_retries})"
+                )
+            await asyncio.sleep(wait)
+        raise RuntimeError("unreachable")
 
     def _calculate_wer(
         self,
@@ -399,6 +453,7 @@ class SemanticWEREvaluator:
         self,
         reference: str,
         hypothesis: str,
+        filename: str = "",
     ) -> tuple[dict, SemanticWERTrace]:
         """Evaluate a transcription against ground truth using multi-turn reasoning.
 
@@ -448,12 +503,22 @@ Show your work clearly, then call calculate_wer with your verified counts."""
             num_turns += 1
 
             try:
-                response = await self.client.messages.create(
-                    model=self.model,
-                    max_tokens=4096,
-                    system=SEMANTIC_WER_SYSTEM_PROMPT,
-                    tools=[CALCULATE_WER_TOOL],
-                    messages=messages,
+                response = await self._api_call(
+                    {
+                        "model": self.model,
+                        "max_tokens": 4096,
+                        "temperature": 0,
+                        "system": [
+                            {
+                                "type": "text",
+                                "text": SEMANTIC_WER_SYSTEM_PROMPT,
+                                "cache_control": {"type": "ephemeral"},
+                            }
+                        ],
+                        "tools": [CALCULATE_WER_TOOL],
+                        "messages": messages,
+                    },
+                    filename,
                 )
             except Exception as e:
                 logger.error(f"Error calling Claude API: {e}")
@@ -542,12 +607,22 @@ Show your work clearly, then call calculate_wer with your verified counts."""
                 if result is not None:
                     # Get final response after tool result
                     try:
-                        final_response = await self.client.messages.create(
-                            model=self.model,
-                            max_tokens=1024,
-                            system=SEMANTIC_WER_SYSTEM_PROMPT,
-                            tools=[CALCULATE_WER_TOOL],
-                            messages=messages,
+                        final_response = await self._api_call(
+                            {
+                                "model": self.model,
+                                "max_tokens": 1024,
+                                "temperature": 0,
+                                "system": [
+                                    {
+                                        "type": "text",
+                                        "text": SEMANTIC_WER_SYSTEM_PROMPT,
+                                        "cache_control": {"type": "ephemeral"},
+                                    }
+                                ],
+                                "tools": [CALCULATE_WER_TOOL],
+                                "messages": messages,
+                            },
+                            filename,
                         )
 
                         final_content = []
@@ -688,6 +763,39 @@ Show your work clearly, then call calculate_wer with your verified counts."""
         )
         return result, trace
 
+    async def evaluate_with_retry(
+        self,
+        reference: str,
+        hypothesis: str,
+        filename: str = "",
+        max_retries: int = 3,
+        timeout_secs: float = 5 * 60,
+    ) -> tuple[dict, SemanticWERTrace] | None:
+        """Evaluate with timeout and retry logic.
+
+        Transient API errors (429, 5xx) are handled per-call inside
+        ``_api_call``.  This method handles overall timeouts and
+        unexpected errors.  Returns None if all attempts fail.
+        """
+        for attempt in range(1, max_retries + 1):
+            try:
+                return await asyncio.wait_for(
+                    self.evaluate(reference, hypothesis, filename=filename),
+                    timeout=timeout_secs,
+                )
+            except asyncio.TimeoutError:
+                logger.warning(
+                    f"{filename}: timed out after {timeout_secs}s "
+                    f"(attempt {attempt}/{max_retries})"
+                )
+                if attempt == max_retries:
+                    logger.error(f"{filename}: failed after {max_retries} timeout retries")
+            except Exception as e:
+                logger.error(f"{filename}: evaluation error: {e}")
+                break
+
+        return None
+
     async def evaluate_service(
         self,
         service_name: ServiceName,
@@ -715,28 +823,36 @@ Show your work clearly, then call calculate_wer with your verified counts."""
             logger.info(f"All samples already have WER metrics for {service_name.value}")
             return []
 
-        results = []
+        results: list[WERMetrics] = []
+        completed = 0
 
-        for i, sample in enumerate(samples):
-            if progress_callback:
-                progress_callback(i, len(samples), sample.sample_id)
+        async def _eval_sample(sample):
+            nonlocal completed
 
-            # Get result and ground truth
-            result, gt = await self.db.get_result_with_ground_truth(
-                sample.sample_id, service_name, model_name
-            )
+            async with self._api_semaphore:
+                # Get result and ground truth
+                result, gt = await self.db.get_result_with_ground_truth(
+                    sample.sample_id, service_name, model_name
+                )
 
-            if not result or not result.transcription:
-                logger.warning(f"No transcription for sample {sample.sample_id}")
-                continue
+                if not result or not result.transcription:
+                    logger.warning(f"No transcription for sample {sample.sample_id}")
+                    return
 
-            if not gt:
-                logger.warning(f"No ground truth for sample {sample.sample_id}")
-                continue
+                if not gt:
+                    logger.warning(f"No ground truth for sample {sample.sample_id}")
+                    return
 
-            # Evaluate with Claude
-            try:
-                eval_result, trace = await self.evaluate(gt.text, result.transcription)
+                # Evaluate with Claude (with retry and timeout)
+                eval_pair = await self.evaluate_with_retry(
+                    gt.text, result.transcription, filename=sample.sample_id
+                )
+
+                if eval_pair is None:
+                    logger.error(f"Failed to evaluate {sample.sample_id}, skipping")
+                    return
+
+                eval_result, trace = eval_pair
 
                 # Update trace with sample info
                 trace.sample_id = sample.sample_id
@@ -766,11 +882,13 @@ Show your work clearly, then call calculate_wer with your verified counts."""
                 await self.db.insert_wer_metrics(metrics)
                 results.append(metrics)
 
-                logger.debug(f"[{i + 1}/{len(samples)}] {sample.sample_id}: WER={metrics.wer:.2%}")
+                completed += 1
+                if progress_callback:
+                    progress_callback(completed, len(samples), sample.sample_id)
 
-            except Exception as e:
-                logger.error(f"Error evaluating {sample.sample_id}: {e}")
-                continue
+                logger.debug(f"[{completed}/{len(samples)}] {sample.sample_id}: WER={metrics.wer:.2%}")
+
+        await asyncio.gather(*(_eval_sample(sample) for sample in samples))
 
         return results
 

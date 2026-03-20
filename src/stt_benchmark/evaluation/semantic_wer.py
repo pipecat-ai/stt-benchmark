@@ -414,7 +414,7 @@ class SemanticWEREvaluator:
         for attempt in range(1, max_retries + 1):
             try:
                 return await self.client.messages.create(**request_payload)
-            except (anthropic.RateLimitError, anthropic.InternalServerError) as e:
+            except (anthropic.RateLimitError, anthropic.InternalServerError, anthropic.APIConnectionError) as e:
                 label = "rate limited" if isinstance(e, anthropic.RateLimitError) else "server error"
                 if attempt == max_retries:
                     raise

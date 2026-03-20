@@ -134,8 +134,11 @@ def calculate_wer(
         evaluator = SemanticWEREvaluator(db_path=db_path)
 
         console.print("Warming prompt cache...", end=" ")
-        await evaluator.warm_cache()
-        console.print("[green]done[/green]\n")
+        try:
+            await evaluator.warm_cache()
+            console.print("[green]done[/green]\n")
+        except Exception as e:
+            console.print(f"[yellow]skipped ({e})[/yellow]\n")
 
         all_stats = []
 

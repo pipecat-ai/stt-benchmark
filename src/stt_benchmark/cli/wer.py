@@ -132,6 +132,14 @@ def calculate_wer(
         console.print(f"Ground truth coverage: {gt_count}/{sample_count} samples\n")
 
         evaluator = SemanticWEREvaluator(db_path=db_path)
+
+        console.print("Warming prompt cache...", end=" ")
+        try:
+            await evaluator.warm_cache()
+            console.print("[green]done[/green]\n")
+        except Exception as e:
+            console.print(f"[yellow]skipped ({e})[/yellow]\n")
+
         all_stats = []
 
         for service_name in service_list:

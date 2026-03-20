@@ -35,6 +35,7 @@ class Database:
 
         self._conn = await aiosqlite.connect(str(self.db_path))
         self._conn.row_factory = aiosqlite.Row
+        await self._conn.execute("PRAGMA journal_mode=WAL")
 
         await self._create_tables()
         logger.debug(f"Database initialized at {self.db_path}")

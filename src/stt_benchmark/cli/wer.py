@@ -45,7 +45,18 @@ def calculate_wer(
         None,
         "--model",
         "-m",
-        help="Model name filter",
+        help="Model name filter (for the STT service result)",
+    ),
+    gt_model: str | None = typer.Option(
+        None,
+        "--gt-model",
+        help="Ground truth model to evaluate against (e.g. 'scribe_v2', 'gemini-3-flash-preview')",
+    ),
+    wer_label: str | None = typer.Option(
+        None,
+        "--wer-label",
+        help="Label for WER results (stored as model_name in wer_metrics). "
+        "Use to avoid overwriting existing WER results.",
     ),
     force_recalculate: bool = typer.Option(
         False,
@@ -103,6 +114,10 @@ def calculate_wer(
     console.print(f"Services: {', '.join(s.value for s in service_list)}")
     if model:
         console.print(f"Model filter: {model}")
+    if gt_model:
+        console.print(f"Ground truth model: {gt_model}")
+    if wer_label:
+        console.print(f"WER label: {wer_label}")
     if force_recalculate:
         console.print("[yellow]Force recalculate: ON[/yellow]")
 
@@ -142,24 +157,31 @@ def calculate_wer(
 
         all_stats = []
 
+        # When wer_label is set but model is not, default to empty string
+        # so we only process the default model results, not all models
+        effective_model = model if model is not None else ("" if wer_label else None)
+        effective_wer_label = wer_label or effective_model
+
         for service_name in service_list:
             console.print(f"\n[bold]Evaluating semantic WER for {service_name.value}...[/bold]")
 
             # Delete existing WER metrics if force recalculate
             if force_recalculate:
-                await db.delete_wer_metrics_for_service(service_name, model)
-                await db.delete_semantic_wer_traces_for_service(service_name, model)
+                await db.delete_wer_metrics_for_service(service_name, effective_wer_label)
+                await db.delete_semantic_wer_traces_for_service(service_name, effective_wer_label)
                 console.print("  [yellow]Deleted existing WER metrics and traces[/yellow]")
 
             # Get samples that need WER calculation
-            pending = await db.get_samples_without_wer(service_name, model)
+            pending = await db.get_samples_without_wer(
+                service_name, effective_model, wer_label=effective_wer_label
+            )
 
             if not pending:
                 console.print("  All samples already have WER metrics")
                 # Still show existing stats
-                metrics = await db.get_wer_metrics_for_service(service_name, model)
+                metrics = await db.get_wer_metrics_for_service(service_name, effective_wer_label)
                 if metrics:
-                    stats = compute_wer_stats(service_name, metrics)
+                    stats = compute_wer_stats(service_name, metrics, effective_wer_label)
                     all_stats.append(stats)
                     console.print(f"  Mean WER: {stats['wer_mean']:.2%}")
                 continue
@@ -180,16 +202,18 @@ def calculate_wer(
 
                 metrics = await evaluator.evaluate_service(
                     service_name,
-                    model_name=model,
+                    model_name=effective_model,
+                    gt_model=gt_model,
+                    wer_label=wer_label,
                     progress_callback=callback,
                 )
 
                 progress.update(progress_task, completed=len(pending))
 
             # Get all metrics for stats
-            all_metrics = await db.get_wer_metrics_for_service(service_name, model)
+            all_metrics = await db.get_wer_metrics_for_service(service_name, effective_wer_label)
             if all_metrics:
-                stats = compute_wer_stats(service_name, all_metrics)
+                stats = compute_wer_stats(service_name, all_metrics, effective_wer_label)
                 all_stats.append(stats)
                 console.print(f"  [green]Completed: {len(metrics)} samples[/green]")
                 console.print(f"  Mean Semantic WER: {stats['wer_mean']:.2%}")
@@ -205,17 +229,19 @@ def calculate_wer(
     asyncio.run(run())
 
 
-def compute_wer_stats(service_name: ServiceName, metrics: list) -> dict:
+def compute_wer_stats(
+    service_name: ServiceName, metrics: list, model_name: str | None = None
+) -> dict:
     """Compute aggregate semantic WER statistics."""
     wer_values = [m.wer for m in metrics if m.wer < float("inf")]
 
-    # Compute pooled WER
     total_errors = sum(m.substitutions + m.deletions + m.insertions for m in metrics)
     total_ref_words = sum(m.reference_words for m in metrics)
     pooled_wer = total_errors / total_ref_words if total_ref_words > 0 else 0.0
 
     return {
         "service_name": service_name,
+        "model_name": model_name or "",
         "num_samples": len(metrics),
         "wer_mean": statistics.mean(wer_values) if wer_values else 0.0,
         "wer_median": statistics.median(wer_values) if wer_values else 0.0,
@@ -226,11 +252,21 @@ def compute_wer_stats(service_name: ServiceName, metrics: list) -> dict:
     }
 
 
+def _format_service_label(stats: dict) -> str:
+    """Format service name with model for display."""
+    name = stats["service_name"].value
+    model = stats.get("model_name", "")
+    if model:
+        return f"{name} ({model})"
+    return name
+
+
 def print_wer_summary(stats_list: list[dict]):
     """Print semantic WER summary table."""
     table = Table(title="Semantic WER Summary")
 
     table.add_column("Service", style="cyan", no_wrap=True)
+    table.add_column("Model", style="dim")
     table.add_column("Samples", justify="right")
     table.add_column("WER Mean", justify="right")
     table.add_column("WER Median", justify="right")
@@ -238,12 +274,12 @@ def print_wer_summary(stats_list: list[dict]):
     table.add_column("WER Max", justify="right")
     table.add_column("Pooled WER", justify="right")
 
-    # Sort by mean WER
     sorted_stats = sorted(stats_list, key=lambda x: x["wer_mean"])
 
     for stats in sorted_stats:
         table.add_row(
             stats["service_name"].value,
+            stats.get("model_name", ""),
             str(stats["num_samples"]),
             f"{stats['wer_mean']:.2%}",
             f"{stats['wer_median']:.2%}",
@@ -254,8 +290,8 @@ def print_wer_summary(stats_list: list[dict]):
 
     console.print(table)
 
-    # Rankings
     console.print("\n[bold]Rankings (by mean semantic WER, lower is better):[/bold]")
     for i, stats in enumerate(sorted_stats, 1):
+        label = _format_service_label(stats)
         medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
-        console.print(f"  {medal} {stats['service_name'].value}: {stats['wer_mean']:.2%}")
+        console.print(f"  {medal} {label}: {stats['wer_mean']:.2%}")

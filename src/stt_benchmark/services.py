@@ -243,6 +243,23 @@ def create_nvidia() -> FrameProcessor:
     )
 
 
+def create_nvidia_sagemaker() -> FrameProcessor:
+    from pipecat.services.nvidia.sagemaker.stt import NvidiaSageMakerSTTService
+
+    for env_var in (
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_SESSION_TOKEN",
+        "AWS_REGION",
+    ):
+        _set_env_from_config(env_var)
+
+    return NvidiaSageMakerSTTService(
+        endpoint_name=_get_env("SAGEMAKER_ASR_ENDPOINT_NAME"),
+        region=_get_env_from_config("AWS_REGION") or "us-west-2",
+    )
+
+
 def create_openai() -> FrameProcessor:
     from pipecat.services.openai.stt import OpenAISTTService
 
@@ -381,6 +398,10 @@ STT_SERVICES: dict[str, ServiceDefinition] = {
         factory=create_nvidia,
         required_env_vars=["NVIDIA_API_KEY"],
     ),
+    "nvidia_sagemaker": ServiceDefinition(
+        factory=create_nvidia_sagemaker,
+        required_env_vars=["SAGEMAKER_ASR_ENDPOINT_NAME"],
+    ),
     "openai": ServiceDefinition(
         factory=create_openai,
         required_env_vars=["OPENAI_API_KEY"],
@@ -445,6 +466,16 @@ def _get_env_from_config(env_var_name: str) -> str:
         return value
     # Fall back to os.getenv for env vars not in config
     return os.getenv(env_var_name, "")
+
+
+def _set_env_from_config(env_var_name: str) -> None:
+    """Set os.environ from config when a value exists and the env var is unset."""
+    if os.getenv(env_var_name):
+        return
+
+    value = _get_env_from_config(env_var_name)
+    if value:
+        os.environ[env_var_name] = value
 
 
 def is_service_available(name: str) -> bool:

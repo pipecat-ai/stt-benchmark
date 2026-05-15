@@ -40,6 +40,7 @@ class BenchmarkConfig(BaseSettings):
     groq_api_key: str = Field(default="", alias="GROQ_API_KEY")
     nvidia_api_key: str = Field(default="", alias="NVIDIA_API_KEY")
     openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")
+    sagemaker_asr_endpoint_name: str = Field(default="", alias="SAGEMAKER_ASR_ENDPOINT_NAME")
     sarvam_api_key: str = Field(default="", alias="SARVAM_API_KEY")
     smallest_api_key: str = Field(default="", alias="SMALLEST_API_KEY")
     soniox_api_key: str = Field(default="", alias="SONIOX_API_KEY")
@@ -48,6 +49,7 @@ class BenchmarkConfig(BaseSettings):
     # AWS credentials
     aws_access_key_id: str = Field(default="", alias="AWS_ACCESS_KEY_ID")
     aws_secret_access_key: str = Field(default="", alias="AWS_SECRET_ACCESS_KEY")
+    aws_session_token: str = Field(default="", alias="AWS_SESSION_TOKEN")
     aws_region: str = Field(default="", alias="AWS_REGION")
 
     # Azure credentials

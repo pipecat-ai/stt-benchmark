@@ -21,7 +21,7 @@ classifiers = [
 
 dependencies = [
     # Pipecat with STT providers
-    "pipecat-ai[assemblyai,aws,azure,cartesia,deepgram,elevenlabs,fal,gladia,google,gradium,groq,nvidia,openai,sarvam,smallest,soniox,speechmatics,whisper,silero,soundfile]>=1,<2",
+    "pipecat-ai[assemblyai,aws,azure,cartesia,deepgram,elevenlabs,fal,gladia,google,gradium,groq,nvidia,openai,sagemaker,sarvam,smallest,soniox,speechmatics,whisper,silero,soundfile]>=1,<2",
     # Dataset handling
     "datasets>=2.16.0,<3.0.0",
     "scipy>=1.11.0",

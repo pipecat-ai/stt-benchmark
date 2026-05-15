@@ -144,7 +144,7 @@ This gives accuracy metrics that reflect real-world impact on downstream LLM app
 
 ## Supported Services
 
-`assemblyai`, `aws`, `azure`, `cartesia`, `deepgram`, `deepgram_flux`, `elevenlabs`, `fal`, `gladia`, `google`, `gradium`, `groq`, `nvidia`, `openai`, `sarvam`, `smallest`, `soniox`, `speechmatics`, `whisper`
+`assemblyai`, `aws`, `azure`, `cartesia`, `deepgram`, `deepgram_flux`, `elevenlabs`, `fal`, `gladia`, `google`, `gradium`, `groq`, `nvidia`, `openai`, `sagemaker`, `sarvam`, `smallest`, `soniox`, `speechmatics`, `whisper`
 
 See `env.example` for required API keys.
 

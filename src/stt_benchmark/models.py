@@ -28,6 +28,7 @@ class ServiceName(str, Enum):
     GRADIUM = "gradium"
     GROQ = "groq"
     NVIDIA = "nvidia"
+    NVIDIA_SAGEMAKER = "nvidia_sagemaker"
     OPENAI = "openai"
     OPENAI_REALTIME = "openai_realtime"
     SARVAM = "sarvam"

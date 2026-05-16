@@ -435,9 +435,9 @@ class SemanticWEREvaluator:
     ) -> dict:
         """Programmatic WER calculation - the only non-LLM logic."""
         if reference_words == 0:
-            wer = 0.0 if (substitutions + deletions + insertions) == 0 else float("inf")
+            wer = 0.0 if (substitutions + deletions + insertions) == 0 else 1.0
         else:
-            wer = (substitutions + deletions + insertions) / reference_words
+            wer = min((substitutions + deletions + insertions) / reference_words, 1.0)
 
         return {
             "wer": wer,
@@ -800,6 +800,8 @@ Show your work clearly, then call calculate_wer with your verified counts."""
         self,
         service_name: ServiceName,
         model_name: str | None = None,
+        gt_model: str | None = None,
+        wer_label: str | None = None,
         progress_callback: Callable | None = None,
     ) -> list[WERMetrics]:
         """Evaluate all transcriptions for a service.
@@ -809,7 +811,12 @@ Show your work clearly, then call calculate_wer with your verified counts."""
 
         Args:
             service_name: Service to evaluate
-            model_name: Optional model name filter
+            model_name: Optional model name filter (for the STT service result)
+            gt_model: Optional ground truth model to use (e.g. 'scribe_v2').
+                If None, uses the default GT selection (human-verified first).
+            wer_label: Optional label for storing WER results. When set, WER
+                metrics are stored with this as model_name instead of the
+                source result's model_name. Allows multiple WER runs per service.
             progress_callback: Optional callback(current, total, sample_id)
 
         Returns:
@@ -817,8 +824,12 @@ Show your work clearly, then call calculate_wer with your verified counts."""
         """
         await self.db.initialize()
 
+        effective_wer_label = wer_label or model_name
+
         # Get samples that need WER calculation
-        samples = await self.db.get_samples_without_wer(service_name, model_name)
+        samples = await self.db.get_samples_without_wer(
+            service_name, model_name, wer_label=effective_wer_label
+        )
         if not samples:
             logger.info(f"All samples already have WER metrics for {service_name.value}")
             return []
@@ -832,7 +843,7 @@ Show your work clearly, then call calculate_wer with your verified counts."""
             async with self._api_semaphore:
                 # Get result and ground truth
                 result, gt = await self.db.get_result_with_ground_truth(
-                    sample.sample_id, service_name, model_name
+                    sample.sample_id, service_name, model_name, gt_model=gt_model
                 )
 
                 if not result or not result.transcription:
@@ -857,7 +868,7 @@ Show your work clearly, then call calculate_wer with your verified counts."""
                 # Update trace with sample info
                 trace.sample_id = sample.sample_id
                 trace.service_name = service_name
-                trace.model_name = model_name
+                trace.model_name = effective_wer_label
 
                 # Store the trace
                 await self.db.insert_semantic_wer_trace(trace)
@@ -866,7 +877,7 @@ Show your work clearly, then call calculate_wer with your verified counts."""
                 metrics = WERMetrics(
                     sample_id=sample.sample_id,
                     service_name=service_name,
-                    model_name=model_name,
+                    model_name=effective_wer_label,
                     wer=eval_result["wer"],
                     substitutions=eval_result["substitutions"],
                     deletions=eval_result["deletions"],

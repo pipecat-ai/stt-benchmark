@@ -9,6 +9,7 @@ from rich.table import Table
 
 from stt_benchmark.config import get_config
 from stt_benchmark.ground_truth.gemini_transcriber import GeminiTranscriber
+from stt_benchmark.ground_truth.scribe_transcriber import ScribeTranscriber
 from stt_benchmark.storage.database import Database
 
 app = typer.Typer()
@@ -24,11 +25,17 @@ def generate_ground_truth(
         "-n",
         help="Limit number of samples to transcribe",
     ),
-    model: str = typer.Option(
-        "gemini-3-flash-preview",
+    provider: str = typer.Option(
+        "scribe",
+        "--provider",
+        "-p",
+        help="Transcription provider: 'scribe' or 'gemini'",
+    ),
+    model: str | None = typer.Option(
+        None,
         "--model",
         "-m",
-        help="Gemini model to use for transcription",
+        help="Model to use (default: gemini-3-flash-preview for gemini, scribe_v2 for scribe)",
     ),
     force: bool = typer.Option(
         False,
@@ -37,32 +44,45 @@ def generate_ground_truth(
         help="Re-transcribe samples that already have ground truth",
     ),
 ):
-    """Generate ground truth transcriptions using Gemini.
+    """Generate ground truth transcriptions using Gemini or ElevenLabs Scribe.
 
-    Uses Google's Gemini model to transcribe audio samples,
-    creating reference transcriptions for WER calculation.
+    Uses Google's Gemini model or ElevenLabs Scribe v2 to transcribe audio
+    samples, creating reference transcriptions for WER calculation.
 
-    Requires GOOGLE_API_KEY environment variable.
+    Requires GOOGLE_API_KEY (for gemini) or ELEVENLABS_API_KEY (for scribe).
 
     Subcommands:
       iterate  - Run a repeatable transcription iteration (saves to JSONL)
       list     - List available transcription runs
       review   - Interactive review of transcription runs with audio playback
     """
-    # If a subcommand was invoked, don't run the default behavior
     if ctx.invoked_subcommand is not None:
         return
 
     config = get_config()
+    provider = provider.lower()
 
-    if not config.google_api_key:
-        console.print("[red]Error: GOOGLE_API_KEY not set[/red]")
-        console.print("\nSet the environment variable:")
-        console.print("  export GOOGLE_API_KEY='your-api-key'")
+    if provider == "scribe":
+        if not config.elevenlabs_api_key:
+            console.print("[red]Error: ELEVENLABS_API_KEY not set[/red]")
+            console.print("\nSet the environment variable:")
+            console.print("  export ELEVENLABS_API_KEY='your-api-key'")
+            raise typer.Exit(1)
+        effective_model = model or "scribe_v2"
+    elif provider == "gemini":
+        if not config.google_api_key:
+            console.print("[red]Error: GOOGLE_API_KEY not set[/red]")
+            console.print("\nSet the environment variable:")
+            console.print("  export GOOGLE_API_KEY='your-api-key'")
+            raise typer.Exit(1)
+        effective_model = model or "gemini-3-flash-preview"
+    else:
+        console.print(f"[red]Error: Unknown provider '{provider}'. Use 'gemini' or 'scribe'.[/red]")
         raise typer.Exit(1)
 
     console.print("\n[bold blue]STT Benchmark - Generate Ground Truth[/bold blue]\n")
-    console.print(f"Model: {model}")
+    console.print(f"Provider: {provider}")
+    console.print(f"Model: {effective_model}")
     if limit:
         console.print(f"Limit: {limit}")
     console.print(f"Force re-transcribe: {force}")
@@ -71,11 +91,10 @@ def generate_ground_truth(
         db = Database()
         await db.initialize()
 
-        # Get samples
         if force:
             samples = await db.get_all_samples()
         else:
-            samples = await db.get_samples_without_ground_truth()
+            samples = await db.get_samples_without_ground_truth(model_used=effective_model)
 
         if not samples:
             console.print("\n[green]All samples already have ground truth![/green]")
@@ -86,8 +105,10 @@ def generate_ground_truth(
 
         console.print(f"Samples to transcribe: {len(samples)}\n")
 
-        # Create transcriber
-        transcriber = GeminiTranscriber(model_name=model)
+        if provider == "scribe":
+            transcriber = ScribeTranscriber(model_name=effective_model)
+        else:
+            transcriber = GeminiTranscriber(model_name=effective_model)
 
         with Progress(
             TextColumn("[progress.description]{task.description}"),
@@ -110,13 +131,11 @@ def generate_ground_truth(
 
             progress.update(task, completed=len(samples))
 
-        # Summary
         console.print(f"\n[green]✓ Generated {len(results)} ground truth transcriptions[/green]")
 
-        # Show stats
-        gt_count = await db.get_ground_truth_count()
+        gt_count = await db.get_ground_truth_count(model_used=effective_model)
         sample_count = await db.get_sample_count()
-        console.print(f"\nGround truth coverage: {gt_count}/{sample_count} samples")
+        console.print(f"\nGround truth coverage ({effective_model}): {gt_count}/{sample_count} samples")
 
         await db.close()
 

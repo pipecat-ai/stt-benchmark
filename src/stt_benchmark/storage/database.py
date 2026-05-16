@@ -78,15 +78,16 @@ class Database:
                 config_snapshot TEXT
             );
 
-            -- Ground truth table
+            -- Ground truth table (keyed by sample + model to allow multiple providers)
             CREATE TABLE IF NOT EXISTS ground_truth (
-                sample_id TEXT PRIMARY KEY REFERENCES samples(sample_id),
+                sample_id TEXT NOT NULL REFERENCES samples(sample_id),
                 text TEXT NOT NULL,
                 model_used TEXT NOT NULL DEFAULT 'gemini-3-flash-preview',
                 generated_at TEXT NOT NULL,
                 verified_by TEXT,
                 verified_at TEXT,
-                original_text TEXT
+                original_text TEXT,
+                PRIMARY KEY (sample_id, model_used)
             );
 
             -- Semantic WER metrics table
@@ -165,6 +166,37 @@ class Database:
             logger.debug("Added original_text column to ground_truth")
         except Exception:
             pass  # Column already exists
+
+        # Migration: Change ground_truth PK from sample_id to (sample_id, model_used)
+        try:
+            cursor = await self._conn.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='ground_truth'"
+            )
+            row = await cursor.fetchone()
+            if row and "PRIMARY KEY (sample_id, model_used)" not in row[0]:
+                await self._conn.executescript(
+                    """
+                    CREATE TABLE ground_truth_new (
+                        sample_id TEXT NOT NULL REFERENCES samples(sample_id),
+                        text TEXT NOT NULL,
+                        model_used TEXT NOT NULL DEFAULT 'gemini-3-flash-preview',
+                        generated_at TEXT NOT NULL,
+                        verified_by TEXT,
+                        verified_at TEXT,
+                        original_text TEXT,
+                        PRIMARY KEY (sample_id, model_used)
+                    );
+                    INSERT INTO ground_truth_new
+                        SELECT sample_id, text, model_used, generated_at,
+                               verified_by, verified_at, original_text
+                        FROM ground_truth;
+                    DROP TABLE ground_truth;
+                    ALTER TABLE ground_truth_new RENAME TO ground_truth;
+                    """
+                )
+                logger.info("Migrated ground_truth table to composite PK (sample_id, model_used)")
+        except Exception as e:
+            logger.debug(f"ground_truth PK migration skipped: {e}")
 
         await self._conn.commit()
 
@@ -475,6 +507,7 @@ class Database:
         sample_id: str,
         new_text: str,
         verified_by: str = "human",
+        model_used: str | None = None,
     ) -> bool:
         """Update ground truth text with human correction.
 
@@ -484,23 +517,23 @@ class Database:
             sample_id: Sample to update
             new_text: The corrected transcription
             verified_by: Who made the correction
+            model_used: If provided, update GT for this specific model.
+                If None, updates the best-match GT (human-verified first, then most recent).
 
         Returns:
             True if updated, False if sample not found
         """
-        # Get existing ground truth
-        existing = await self.get_ground_truth(sample_id)
+        existing = await self.get_ground_truth(sample_id, model_used=model_used)
         if not existing:
             return False
 
-        # Store original text if this is the first correction
         original_text = existing.original_text or existing.text
 
         await self._conn.execute(
             """
             UPDATE ground_truth
             SET text = ?, verified_by = ?, verified_at = ?, original_text = ?
-            WHERE sample_id = ?
+            WHERE sample_id = ? AND model_used = ?
             """,
             (
                 new_text,
@@ -508,16 +541,34 @@ class Database:
                 datetime.now(timezone.utc).isoformat(),
                 original_text,
                 sample_id,
+                existing.model_used,
             ),
         )
         await self._conn.commit()
         return True
 
-    async def get_ground_truth(self, sample_id: str) -> GroundTruth | None:
-        """Get ground truth for a sample."""
-        cursor = await self._conn.execute(
-            "SELECT * FROM ground_truth WHERE sample_id = ?", (sample_id,)
-        )
+    async def get_ground_truth(
+        self, sample_id: str, model_used: str | None = None
+    ) -> GroundTruth | None:
+        """Get ground truth for a sample.
+
+        Args:
+            sample_id: The sample to look up.
+            model_used: If provided, get GT for this specific model.
+                If None, prefer human-verified, then most recent.
+        """
+        if model_used:
+            cursor = await self._conn.execute(
+                "SELECT * FROM ground_truth WHERE sample_id = ? AND model_used = ?",
+                (sample_id, model_used),
+            )
+        else:
+            cursor = await self._conn.execute(
+                """SELECT * FROM ground_truth WHERE sample_id = ?
+                ORDER BY verified_by IS NOT NULL DESC, generated_at DESC
+                LIMIT 1""",
+                (sample_id,),
+            )
         row = await cursor.fetchone()
         if row:
             return GroundTruth(
@@ -533,16 +584,35 @@ class Database:
             )
         return None
 
-    async def get_samples_without_ground_truth(self) -> list[AudioSample]:
-        """Get samples that don't have ground truth."""
-        cursor = await self._conn.execute(
-            """
-            SELECT s.* FROM samples s
-            LEFT JOIN ground_truth gt ON s.sample_id = gt.sample_id
-            WHERE gt.sample_id IS NULL
-            ORDER BY s.dataset_index
-            """
-        )
+    async def get_samples_without_ground_truth(
+        self, model_used: str | None = None
+    ) -> list[AudioSample]:
+        """Get samples that don't have ground truth.
+
+        Args:
+            model_used: If provided, get samples missing GT for this specific model.
+                If None, get samples with no GT at all.
+        """
+        if model_used:
+            cursor = await self._conn.execute(
+                """
+                SELECT s.* FROM samples s
+                LEFT JOIN ground_truth gt ON s.sample_id = gt.sample_id
+                    AND gt.model_used = ?
+                WHERE gt.sample_id IS NULL
+                ORDER BY s.dataset_index
+                """,
+                (model_used,),
+            )
+        else:
+            cursor = await self._conn.execute(
+                """
+                SELECT s.* FROM samples s
+                LEFT JOIN ground_truth gt ON s.sample_id = gt.sample_id
+                WHERE gt.sample_id IS NULL
+                ORDER BY s.dataset_index
+                """
+            )
         rows = await cursor.fetchall()
         return [
             AudioSample(
@@ -555,9 +625,22 @@ class Database:
             for row in rows
         ]
 
-    async def get_ground_truth_count(self) -> int:
-        """Get number of ground truth entries."""
-        cursor = await self._conn.execute("SELECT COUNT(*) FROM ground_truth")
+    async def get_ground_truth_count(self, model_used: str | None = None) -> int:
+        """Get number of ground truth entries.
+
+        Args:
+            model_used: If provided, count GT entries for this specific model.
+                If None, count distinct samples that have any GT.
+        """
+        if model_used:
+            cursor = await self._conn.execute(
+                "SELECT COUNT(*) FROM ground_truth WHERE model_used = ?",
+                (model_used,),
+            )
+        else:
+            cursor = await self._conn.execute(
+                "SELECT COUNT(DISTINCT sample_id) FROM ground_truth"
+            )
         row = await cursor.fetchone()
         return row[0]
 
@@ -636,37 +719,47 @@ class Database:
         return cursor.rowcount
 
     async def get_samples_without_wer(
-        self, service_name: ServiceName, model_name: str | None = None
+        self,
+        service_name: ServiceName,
+        model_name: str | None = None,
+        wer_label: str | None = None,
     ) -> list[AudioSample]:
-        """Get samples that have results but no WER metrics for a service."""
-        if model_name:
-            cursor = await self._conn.execute(
-                """
-                SELECT s.* FROM samples s
-                INNER JOIN results r ON s.sample_id = r.sample_id
-                    AND r.service_name = ? AND r.model_name = ?
-                INNER JOIN ground_truth gt ON s.sample_id = gt.sample_id
-                LEFT JOIN wer_metrics w ON s.sample_id = w.sample_id
-                    AND w.service_name = ? AND w.model_name = ?
-                WHERE w.id IS NULL AND r.transcription IS NOT NULL
-                ORDER BY s.dataset_index
-                """,
-                (service_name.value, model_name, service_name.value, model_name),
-            )
+        """Get samples that have results but no WER metrics for a service.
+
+        Args:
+            service_name: STT service to check.
+            model_name: Filter results by this model name (None = all models).
+            wer_label: Check WER existence under this label instead of model_name.
+                Useful when storing WER with a different key than the source results.
+        """
+        wer_model = wer_label if wer_label is not None else model_name
+
+        # Build query parts based on which filters are active
+        if model_name is not None:
+            results_join = "INNER JOIN results r ON s.sample_id = r.sample_id AND r.service_name = ? AND r.model_name = ?"
+            results_params = [service_name.value, model_name]
         else:
-            cursor = await self._conn.execute(
-                """
-                SELECT s.* FROM samples s
-                INNER JOIN results r ON s.sample_id = r.sample_id
-                    AND r.service_name = ?
-                INNER JOIN ground_truth gt ON s.sample_id = gt.sample_id
-                LEFT JOIN wer_metrics w ON s.sample_id = w.sample_id
-                    AND w.service_name = ?
-                WHERE w.id IS NULL AND r.transcription IS NOT NULL
-                ORDER BY s.dataset_index
-                """,
-                (service_name.value, service_name.value),
-            )
+            results_join = "INNER JOIN results r ON s.sample_id = r.sample_id AND r.service_name = ?"
+            results_params = [service_name.value]
+
+        if wer_model is not None:
+            wer_join = "LEFT JOIN wer_metrics w ON s.sample_id = w.sample_id AND w.service_name = ? AND w.model_name = ?"
+            wer_params = [service_name.value, wer_model]
+        else:
+            wer_join = "LEFT JOIN wer_metrics w ON s.sample_id = w.sample_id AND w.service_name = ?"
+            wer_params = [service_name.value]
+
+        cursor = await self._conn.execute(
+            f"""
+            SELECT s.* FROM samples s
+            {results_join}
+            {wer_join}
+            WHERE w.id IS NULL AND r.transcription IS NOT NULL
+                AND EXISTS (SELECT 1 FROM ground_truth gt WHERE gt.sample_id = s.sample_id)
+            ORDER BY s.dataset_index
+            """,
+            results_params + wer_params,
+        )
         rows = await cursor.fetchall()
         return [
             AudioSample(
@@ -808,11 +901,14 @@ class Database:
         return cursor.rowcount
 
     async def get_result_with_ground_truth(
-        self, sample_id: str, service_name: ServiceName, model_name: str | None = None
+        self,
+        sample_id: str,
+        service_name: ServiceName,
+        model_name: str | None = None,
+        gt_model: str | None = None,
     ) -> tuple[BenchmarkResult | None, GroundTruth | None]:
         """Get a result and its ground truth for WER calculation."""
-        # Get result
-        if model_name:
+        if model_name is not None:
             cursor = await self._conn.execute(
                 "SELECT * FROM results WHERE sample_id = ? AND service_name = ? AND model_name = ?",
                 (sample_id, service_name.value, model_name),
@@ -825,8 +921,7 @@ class Database:
         row = await cursor.fetchone()
         result = self._row_to_result(row) if row else None
 
-        # Get ground truth
-        gt = await self.get_ground_truth(sample_id)
+        gt = await self.get_ground_truth(sample_id, model_used=gt_model)
 
         return result, gt
 
@@ -1064,6 +1159,12 @@ class Database:
                 r.transcription
             FROM wer_metrics w
             JOIN ground_truth g ON w.sample_id = g.sample_id
+                AND g.model_used = (
+                    SELECT model_used FROM ground_truth g2
+                    WHERE g2.sample_id = g.sample_id
+                    ORDER BY g2.verified_by IS NOT NULL DESC, g2.generated_at DESC
+                    LIMIT 1
+                )
             JOIN results r ON w.sample_id = r.sample_id
                 AND w.service_name = r.service_name
                 AND w.model_name = r.model_name

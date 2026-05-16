@@ -46,6 +46,11 @@ class BenchmarkConfig(BaseSettings):
     soniox_api_key: str = Field(default="", alias="SONIOX_API_KEY")
     speechmatics_api_key: str = Field(default="", alias="SPEECHMATICS_API_KEY")
 
+    # Local services (self-hosted, no API key)
+    nemotron_local_url: str = Field(
+        default="ws://localhost:8080", alias="NEMOTRON_LOCAL_URL"
+    )
+
     # AWS credentials
     aws_access_key_id: str = Field(default="", alias="AWS_ACCESS_KEY_ID")
     aws_secret_access_key: str = Field(default="", alias="AWS_SECRET_ACCESS_KEY")

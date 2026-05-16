@@ -260,6 +260,17 @@ def create_nvidia_sagemaker() -> FrameProcessor:
     )
 
 
+def create_nemotron_local() -> FrameProcessor:
+    # Self-hosted Nemotron streaming ASR (src/nemotron_speech/server.py).
+    # Requires that server to be running; no API key. Override the URL with
+    # NEMOTRON_LOCAL_URL (defaults to ws://localhost:8080).
+    from stt_benchmark.nemotron_local_stt import NemotronLocalSTTService
+
+    return NemotronLocalSTTService(
+        url=_get_env_from_config("NEMOTRON_LOCAL_URL") or "ws://localhost:8080",
+    )
+
+
 def create_openai() -> FrameProcessor:
     from pipecat.services.openai.stt import OpenAISTTService
 
@@ -429,6 +440,10 @@ STT_SERVICES: dict[str, ServiceDefinition] = {
     "whisper": ServiceDefinition(
         factory=create_whisper,
         required_env_vars=[],  # Local model, no API key needed
+    ),
+    "nemotron_local": ServiceDefinition(
+        factory=create_nemotron_local,
+        required_env_vars=[],  # Self-hosted server, no API key needed
     ),
 }
 

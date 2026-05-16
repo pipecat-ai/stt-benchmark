@@ -36,6 +36,7 @@ class ServiceName(str, Enum):
     SPEECHMATICS = "speechmatics"
     SONIOX = "soniox"
     WHISPER = "whisper"
+    NEMOTRON_LOCAL = "nemotron_local"
 
 
 class AudioSample(BaseModel):

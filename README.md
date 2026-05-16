@@ -8,16 +8,17 @@ Benchmark results on 1000 samples from the `pipecat-ai/smart-turn-data-v3.1-trai
 
 | Service | Transcripts | Perfect | WER Mean | Pooled WER | TTFS Median | TTFS P95 | TTFS P99 |
 |---------|-------------|---------|----------|------------|-------------|----------|----------|
-| assemblyai | 99.8% | 66.8% | 3.49% | 3.02% | 256ms | 362ms | 417ms |
-| aws | 100.0% | 77.4% | 1.68% | 1.75% | 1136ms | 1527ms | 1897ms |
-| azure | 100.0% | 82.9% | 1.21% | 1.18% | 1016ms | 1345ms | 1791ms |
-| cartesia | 99.9% | 60.5% | 3.92% | 4.36% | 266ms | 364ms | 898ms |
-| deepgram | 99.8% | 76.5% | 1.71% | 1.62% | 247ms | 298ms | 326ms |
-| elevenlabs | 99.7% | 81.3% | 3.16% | 3.12% | 281ms | 348ms | 407ms |
-| google | 100.0% | 69.0% | 2.84% | 2.85% | 878ms | 1155ms | 1570ms |
-| openai | 99.3% | 75.9% | 3.24% | 3.06% | 637ms | 965ms | 1655ms |
-| soniox | 99.8% | 84.1% | 1.25% | 1.29% | 249ms | 281ms | 310ms |
-| speechmatics | 99.7% | 83.2% | 1.40% | 1.07% | 495ms | 676ms | 736ms |
+| AssemblyAI | 99.8% | 66.8% | 3.49% | 3.02% | 256ms | 362ms | 417ms |
+| AWS | 100.0% | 77.4% | 1.68% | 1.75% | 1136ms | 1527ms | 1897ms |
+| Azure | 100.0% | 82.9% | 1.21% | 1.18% | 1016ms | 1345ms | 1791ms |
+| Cartesia | 99.9% | 60.5% | 3.92% | 4.36% | 266ms | 364ms | 898ms |
+| Deepgram | 99.8% | 76.5% | 1.71% | 1.62% | 247ms | 298ms | 326ms |
+| Elevenlabs | 99.7% | 81.3% | 3.16% | 3.12% | 281ms | 348ms | 407ms |
+| Google | 100.0% | 69.0% | 2.84% | 2.85% | 878ms | 1155ms | 1570ms |
+| OpenAI | 99.3% | 75.9% | 3.24% | 3.06% | 637ms | 965ms | 1655ms |
+| Smallest AI | 100.0% | 72.4% | 2.30% | 2.37% | 398ms | 533ms | 1593ms |
+| Soniox | 99.8% | 84.1% | 1.25% | 1.29% | 249ms | 281ms | 310ms |
+| Speechmatics | 99.7% | 83.2% | 1.40% | 1.07% | 495ms | 676ms | 736ms |
 
 ### Latency vs Accuracy Trade-off
 
@@ -144,7 +145,7 @@ This gives accuracy metrics that reflect real-world impact on downstream LLM app
 
 ## Supported Services
 
-`assemblyai`, `aws`, `azure`, `cartesia`, `deepgram`, `deepgram_flux`, `elevenlabs`, `fal`, `gladia`, `google`, `gradium`, `groq`, `nvidia`, `openai`, `sagemaker`, `sarvam`, `smallest`, `soniox`, `speechmatics`, `whisper`
+`assemblyai`, `aws`, `azure`, `cartesia`, `deepgram`, `deepgram_flux`, `elevenlabs`, `fal`, `gladia`, `google`, `gradium`, `groq`, `nvidia`, `nvidia_sagemaker`, `openai`, `sarvam`, `smallest`, `soniox`, `speechmatics`, `whisper`
 
 See `env.example` for required API keys.
 

@@ -8,6 +8,7 @@
     "elevenlabs",
     "google",
     "openai_realtime",
+    "smallest",
     "soniox",
     "speechmatics"
   ],
@@ -20,6 +21,7 @@
     "elevenlabs": "ElevenLabs",
     "google": "Google",
     "openai_realtime": "OpenAI",
+    "smallest": "Smallest AI",
     "soniox": "Soniox",
     "speechmatics": "Speechmatics"
   },

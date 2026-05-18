@@ -22,6 +22,10 @@ Server protocol (see src/nemotron_speech/server.py):
 """
 
 import json
+import os
+import re
+import threading
+from pathlib import Path
 
 from loguru import logger
 from pipecat.frames.frames import (
@@ -32,12 +36,47 @@ from pipecat.frames.frames import (
     InterimTranscriptionFrame,
     StartFrame,
     TranscriptionFrame,
+    VADUserStartedSpeakingFrame,
     VADUserStoppedSpeakingFrame,
 )
 from pipecat.processors.frame_processor import FrameDirection
 from pipecat.services.stt_service import WebsocketSTTService
 from pipecat.utils.time import time_now_iso8601
 from websockets.asyncio.client import connect as websocket_connect
+
+
+_TELEMETRY_LOCK = threading.Lock()
+_TELEMETRY_COUNTERS: dict[str, int] = {}
+
+
+def _telemetry_run_tag() -> str | None:
+    for env_name in (
+        "NEMOTRON_RUN_TAG",
+        "NEMOTRON_TELEMETRY_RUN_TAG",
+        "STT_BENCHMARK_RUN_TAG",
+    ):
+        value = os.environ.get(env_name)
+        if value:
+            return value
+    return None
+
+
+def _safe_tag_filename(tag: str) -> str:
+    return re.sub(r"[^A-Za-z0-9._-]+", "_", tag).strip("._-") or "tag"
+
+
+def _telemetry_dir() -> Path:
+    configured = os.environ.get("NEMOTRON_TELEMETRY_DIR")
+    if configured:
+        return Path(configured).expanduser()
+    return Path(__file__).resolve().parents[2] / "stt_benchmark_data" / "client_telemetry"
+
+
+def _next_telemetry_index(tag: str) -> int:
+    with _TELEMETRY_LOCK:
+        index = _TELEMETRY_COUNTERS.get(tag, 0)
+        _TELEMETRY_COUNTERS[tag] = index + 1
+        return index
 
 
 class NemotronLocalSTTService(WebsocketSTTService):
@@ -66,6 +105,18 @@ class NemotronLocalSTTService(WebsocketSTTService):
         self._url = url
         self._receive_task = None
         self._ready = False
+        self._telemetry_tag = _telemetry_run_tag()
+        self._telemetry_batch_index = (
+            _next_telemetry_index(self._telemetry_tag) if self._telemetry_tag else None
+        )
+        self._telemetry_written = False
+        self._telemetry_hard_resets = 0
+        self._telemetry_soft_resets = 0
+        self._telemetry_final_frames = 0
+        self._telemetry_vad_starts = 0
+        self._telemetry_vad_stops = 0
+        self._telemetry_early_final = False
+        self._telemetry_started_after_final = 0
 
     def can_generate_metrics(self) -> bool:
         """Whether this service can generate processing metrics."""
@@ -101,6 +152,7 @@ class NemotronLocalSTTService(WebsocketSTTService):
             await self.cancel_task(self._receive_task)
             self._receive_task = None
         await self._disconnect_websocket()
+        self._write_telemetry_once(reason="disconnect")
 
     async def _connect_websocket(self):
         """Open the WebSocket and wait for the server's ready message."""
@@ -153,6 +205,10 @@ class NemotronLocalSTTService(WebsocketSTTService):
             await self._websocket.send(
                 json.dumps({"type": "reset", "finalize": finalize})
             )
+            if finalize:
+                self._telemetry_hard_resets += 1
+            else:
+                self._telemetry_soft_resets += 1
         except Exception as e:
             logger.error(f"{self} failed to send reset: {e}")
 
@@ -166,7 +222,14 @@ class NemotronLocalSTTService(WebsocketSTTService):
         """
         await super().process_frame(frame, direction)
 
+        if isinstance(frame, VADUserStartedSpeakingFrame):
+            self._telemetry_vad_starts += 1
+            if self._telemetry_final_frames:
+                self._telemetry_early_final = True
+                self._telemetry_started_after_final += 1
+
         if isinstance(frame, VADUserStoppedSpeakingFrame):
+            self._telemetry_vad_stops += 1
             self.request_finalize()
             await self._send_reset(finalize=True)
 
@@ -198,6 +261,7 @@ class NemotronLocalSTTService(WebsocketSTTService):
             # Hard-reset final: server already dedups to the new delta, which
             # (one connection per sample) is the full utterance transcript.
             self.confirm_finalize()
+            self._telemetry_final_frames += 1
             await self.push_frame(
                 TranscriptionFrame(text, self._user_id, time_now_iso8601(), None)
             )
@@ -207,3 +271,29 @@ class NemotronLocalSTTService(WebsocketSTTService):
                     text, self._user_id, time_now_iso8601(), None
                 )
             )
+
+    def _write_telemetry_once(self, *, reason: str) -> Path | None:
+        """Append one per-connection telemetry JSONL record when enabled."""
+        if self._telemetry_written or not self._telemetry_tag:
+            return None
+        self._telemetry_written = True
+
+        telemetry_dir = _telemetry_dir()
+        telemetry_dir.mkdir(parents=True, exist_ok=True)
+        path = telemetry_dir / f"{_safe_tag_filename(self._telemetry_tag)}.jsonl"
+        payload = {
+            "run_tag": self._telemetry_tag,
+            "benchmark_batch_index": self._telemetry_batch_index,
+            "timestamp": time_now_iso8601(),
+            "reason": reason,
+            "hard_resets": self._telemetry_hard_resets,
+            "soft_resets": self._telemetry_soft_resets,
+            "final_transcription_frames": self._telemetry_final_frames,
+            "early_final": self._telemetry_early_final,
+            "vad_starts": self._telemetry_vad_starts,
+            "vad_stops": self._telemetry_vad_stops,
+            "started_after_final_count": self._telemetry_started_after_final,
+        }
+        with path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(payload, sort_keys=True) + "\n")
+        return path

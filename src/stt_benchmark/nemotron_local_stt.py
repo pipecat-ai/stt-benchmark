@@ -142,6 +142,8 @@ class NemotronLocalSTTService(WebsocketSTTService):
         self._single_finalize_stop_seq = 0
         self._single_finalize_pending_stop_seq: int | None = None
         self._single_finalize_reset_sent = False
+        self._final_transcription_committed = False
+        self._last_final_transcription_text: str | None = None
         self._telemetry_tag = _telemetry_run_tag()
         self._telemetry_batch_index = (
             _next_telemetry_index(self._telemetry_tag) if self._telemetry_tag else None
@@ -167,10 +169,11 @@ class NemotronLocalSTTService(WebsocketSTTService):
 
     async def stop(self, frame: EndFrame):
         """Flush any buffered audio, then disconnect."""
-        if self._single_finalize_mode:
-            await self._send_pending_single_finalize_on_stop()
-        else:
-            await self._send_reset(finalize=True)
+        if not self._final_transcription_committed:
+            if self._single_finalize_mode:
+                await self._send_pending_single_finalize_on_stop()
+            else:
+                await self._send_finalize_reset()
         await super().stop(frame)
         await self._disconnect()
 
@@ -264,6 +267,13 @@ class NemotronLocalSTTService(WebsocketSTTService):
             logger.error(f"{self} failed to send reset: {e}")
             return False
 
+    async def _send_finalize_reset(self) -> bool:
+        """Send a hard reset, arming pipecat finalization only for that send."""
+        sent = await self._send_reset(finalize=True, before_send=self.request_finalize)
+        if not sent:
+            self._finalize_requested = False
+        return sent
+
     async def _arm_single_finalize_timer(self):
         """Arm/re-arm the single-finalize debounce timer for the latest VAD stop."""
         previous_task = None
@@ -342,9 +352,8 @@ class NemotronLocalSTTService(WebsocketSTTService):
                 self._single_finalize_reset_sent = False
             return False
 
-        sent = await self._send_reset(finalize=True, before_send=self.request_finalize)
+        sent = await self._send_finalize_reset()
         if not sent:
-            self._finalize_requested = False
             async with self._single_finalize_lock:
                 self._single_finalize_reset_sent = False
         return sent
@@ -363,6 +372,8 @@ class NemotronLocalSTTService(WebsocketSTTService):
             if self._telemetry_final_frames:
                 self._telemetry_early_final = True
                 self._telemetry_started_after_final += 1
+            if self._final_transcription_committed and not self._single_finalize_mode:
+                self._final_transcription_committed = False
             if self._single_finalize_mode:
                 await self._cancel_single_finalize_timer(clear_pending=True)
 
@@ -374,8 +385,7 @@ class NemotronLocalSTTService(WebsocketSTTService):
             if self._single_finalize_mode:
                 await self._arm_single_finalize_timer()
             else:
-                self.request_finalize()
-                await self._send_reset(finalize=True)
+                await self._send_finalize_reset()
 
     async def _receive_messages(self):
         if not self._websocket:
@@ -399,10 +409,12 @@ class NemotronLocalSTTService(WebsocketSTTService):
 
     async def _handle_transcript(self, data: dict):
         text = (data.get("text") or "").strip()
+        is_finalize_final = bool(data.get("is_final")) and data.get("finalize") is True
         if not text:
+            if is_finalize_final:
+                self._finalize_requested = False
             return
-        is_finalize_final = data.get("is_final") and data.get("finalize") is True
-        if self._single_finalize_mode and not is_finalize_final:
+        if not is_finalize_final:
             await self.push_frame(
                 InterimTranscriptionFrame(
                     text, self._user_id, time_now_iso8601(), None
@@ -410,22 +422,24 @@ class NemotronLocalSTTService(WebsocketSTTService):
             )
             return
 
-        if data.get("is_final"):
-            # Hard-reset final: server already dedups to the new delta, which
-            # (one connection per sample) is the full utterance transcript.
-            self.confirm_finalize()
-            self._telemetry_final_frames += 1
-            if self._telemetry_user_speaking:
-                self._telemetry_early_final = True
-            await self.push_frame(
-                TranscriptionFrame(text, self._user_id, time_now_iso8601(), None)
-            )
-        else:
-            await self.push_frame(
-                InterimTranscriptionFrame(
-                    text, self._user_id, time_now_iso8601(), None
-                )
-            )
+        if text == self._last_final_transcription_text:
+            self._finalize_requested = False
+            return
+        if not self._finalize_requested:
+            logger.debug(f"{self} ignoring unarmed finalize transcript: '{text}'")
+            return
+
+        # Hard-reset final: server already dedups to the new delta, which
+        # (one connection per sample) is the full utterance transcript.
+        self.confirm_finalize()
+        self._last_final_transcription_text = text
+        self._final_transcription_committed = True
+        self._telemetry_final_frames += 1
+        if self._telemetry_user_speaking:
+            self._telemetry_early_final = True
+        await self.push_frame(
+            TranscriptionFrame(text, self._user_id, time_now_iso8601(), None)
+        )
 
     def _write_telemetry_once(self, *, reason: str) -> Path | None:
         """Append one per-connection telemetry JSONL record when enabled."""

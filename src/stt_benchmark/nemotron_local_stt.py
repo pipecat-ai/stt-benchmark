@@ -21,6 +21,8 @@ Server protocol (see src/nemotron_speech/server.py):
   so the final delta is the full utterance transcript.
 """
 
+import asyncio
+import contextlib
 import json
 import os
 import re
@@ -47,6 +49,8 @@ from websockets.asyncio.client import connect as websocket_connect
 
 _TELEMETRY_LOCK = threading.Lock()
 _TELEMETRY_COUNTERS: dict[str, int] = {}
+_DEFAULT_FINALIZE_SILENCE_MS = 2500
+_MAX_FINALIZE_SILENCE_MS = 10_000
 
 
 def _telemetry_run_tag() -> str | None:
@@ -79,6 +83,16 @@ def _next_telemetry_index(tag: str) -> int:
         return index
 
 
+def _env_int(name: str, default: int) -> int:
+    value = os.environ.get(name)
+    if value is None or value == "":
+        return default
+    try:
+        return int(value)
+    except ValueError as e:
+        raise ValueError(f"{name} must be an integer, got {value!r}") from e
+
+
 class NemotronLocalSTTService(WebsocketSTTService):
     """Streaming STT against the local Nemotron WebSocket ASR server.
 
@@ -105,6 +119,29 @@ class NemotronLocalSTTService(WebsocketSTTService):
         self._url = url
         self._receive_task = None
         self._ready = False
+        self._audio_send_lock = asyncio.Lock()
+        self._finalize_mode = (
+            os.environ.get("NEMOTRON_FINALIZE_MODE", "").strip().lower()
+        )
+        self._single_finalize_mode = self._finalize_mode == "single"
+        self._finalize_silence_ms = _DEFAULT_FINALIZE_SILENCE_MS
+        if self._single_finalize_mode:
+            self._finalize_silence_ms = _env_int(
+                "NEMOTRON_FINALIZE_SILENCE_MS", _DEFAULT_FINALIZE_SILENCE_MS
+            )
+        if self._single_finalize_mode and not (
+            0 <= self._finalize_silence_ms < _MAX_FINALIZE_SILENCE_MS
+        ):
+            raise ValueError(
+                "NEMOTRON_FINALIZE_SILENCE_MS must be >= 0 and < "
+                f"{_MAX_FINALIZE_SILENCE_MS}"
+            )
+        self._finalize_silence_seconds = self._finalize_silence_ms / 1000
+        self._single_finalize_lock = asyncio.Lock()
+        self._single_finalize_timer_task: asyncio.Task | None = None
+        self._single_finalize_stop_seq = 0
+        self._single_finalize_pending_stop_seq: int | None = None
+        self._single_finalize_reset_sent = False
         self._telemetry_tag = _telemetry_run_tag()
         self._telemetry_batch_index = (
             _next_telemetry_index(self._telemetry_tag) if self._telemetry_tag else None
@@ -117,6 +154,7 @@ class NemotronLocalSTTService(WebsocketSTTService):
         self._telemetry_vad_stops = 0
         self._telemetry_early_final = False
         self._telemetry_started_after_final = 0
+        self._telemetry_user_speaking = False
 
     def can_generate_metrics(self) -> bool:
         """Whether this service can generate processing metrics."""
@@ -129,12 +167,16 @@ class NemotronLocalSTTService(WebsocketSTTService):
 
     async def stop(self, frame: EndFrame):
         """Flush any buffered audio, then disconnect."""
-        await self._send_reset(finalize=True)
+        if self._single_finalize_mode:
+            await self._send_pending_single_finalize_on_stop()
+        else:
+            await self._send_reset(finalize=True)
         await super().stop(frame)
         await self._disconnect()
 
     async def cancel(self, frame: CancelFrame):
         """Cancel the service and disconnect."""
+        await self._cancel_single_finalize_timer(clear_pending=True)
         await super().cancel(frame)
         await self._disconnect()
 
@@ -147,6 +189,7 @@ class NemotronLocalSTTService(WebsocketSTTService):
             )
 
     async def _disconnect(self):
+        await self._cancel_single_finalize_timer(clear_pending=True)
         await super()._disconnect()
         if self._receive_task:
             await self.cancel_task(self._receive_task)
@@ -191,26 +234,120 @@ class NemotronLocalSTTService(WebsocketSTTService):
         """Send audio to the server; results arrive via the receive task."""
         if self._websocket and self._ready:
             try:
-                await self._websocket.send(audio)
+                async with self._audio_send_lock:
+                    if self._websocket and self._ready:
+                        await self._websocket.send(audio)
             except Exception as e:
                 logger.error(f"{self} failed to send audio: {e}")
                 await self._report_error(ErrorFrame(f"Failed to send audio: {e}"))
         yield None
 
-    async def _send_reset(self, finalize: bool = True):
+    async def _send_reset(self, finalize: bool = True, before_send=None) -> bool:
         """Ask the server to finalize the current utterance (hard reset)."""
         if not (self._websocket and self._ready):
-            return
+            return False
         try:
-            await self._websocket.send(
-                json.dumps({"type": "reset", "finalize": finalize})
-            )
+            async with self._audio_send_lock:
+                if not (self._websocket and self._ready):
+                    return False
+                if before_send:
+                    before_send()
+                await self._websocket.send(
+                    json.dumps({"type": "reset", "finalize": finalize})
+                )
             if finalize:
                 self._telemetry_hard_resets += 1
             else:
                 self._telemetry_soft_resets += 1
+            return True
         except Exception as e:
             logger.error(f"{self} failed to send reset: {e}")
+            return False
+
+    async def _arm_single_finalize_timer(self):
+        """Arm/re-arm the single-finalize debounce timer for the latest VAD stop."""
+        previous_task = None
+        async with self._single_finalize_lock:
+            if self._single_finalize_reset_sent:
+                return
+            previous_task = self._single_finalize_timer_task
+            self._single_finalize_stop_seq += 1
+            stop_seq = self._single_finalize_stop_seq
+            self._single_finalize_pending_stop_seq = stop_seq
+            self._single_finalize_timer_task = asyncio.create_task(
+                self._single_finalize_timer(stop_seq),
+                name=f"{self}::single_finalize_timer",
+            )
+
+        if previous_task and not previous_task.done():
+            previous_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await previous_task
+
+    async def _single_finalize_timer(self, stop_seq: int):
+        try:
+            await asyncio.sleep(self._finalize_silence_seconds)
+            await self._send_armed_single_finalize(stop_seq)
+        except asyncio.CancelledError:
+            pass
+        finally:
+            async with self._single_finalize_lock:
+                if self._single_finalize_timer_task is asyncio.current_task():
+                    self._single_finalize_timer_task = None
+
+    async def _cancel_single_finalize_timer(self, *, clear_pending: bool):
+        """Cancel the debounce timer; optionally abandon the armed VAD stop."""
+        async with self._single_finalize_lock:
+            task = self._single_finalize_timer_task
+            self._single_finalize_timer_task = None
+            if clear_pending:
+                self._single_finalize_pending_stop_seq = None
+                self._single_finalize_stop_seq += 1
+
+        if task and task is not asyncio.current_task() and not task.done():
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+
+    async def _send_pending_single_finalize_on_stop(self) -> bool:
+        """Flush the currently armed single finalize during service shutdown."""
+        async with self._single_finalize_lock:
+            task = self._single_finalize_timer_task
+            pending_stop_seq = self._single_finalize_pending_stop_seq
+            self._single_finalize_timer_task = None
+
+        if task and task is not asyncio.current_task() and not task.done():
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+
+        if pending_stop_seq is None:
+            return False
+        return await self._send_armed_single_finalize(pending_stop_seq)
+
+    async def _send_armed_single_finalize(self, stop_seq: int) -> bool:
+        """Send the one hard reset for the VAD stop still armed by the timer."""
+        async with self._single_finalize_lock:
+            if self._single_finalize_reset_sent:
+                return False
+            if self._single_finalize_pending_stop_seq != stop_seq:
+                return False
+            self._single_finalize_pending_stop_seq = None
+            self._single_finalize_reset_sent = True
+            if self._single_finalize_timer_task is asyncio.current_task():
+                self._single_finalize_timer_task = None
+
+        if not (self._websocket and self._ready):
+            async with self._single_finalize_lock:
+                self._single_finalize_reset_sent = False
+            return False
+
+        sent = await self._send_reset(finalize=True, before_send=self.request_finalize)
+        if not sent:
+            self._finalize_requested = False
+            async with self._single_finalize_lock:
+                self._single_finalize_reset_sent = False
+        return sent
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         """Trigger a hard reset when VAD detects end of speech.
@@ -220,18 +357,25 @@ class NemotronLocalSTTService(WebsocketSTTService):
         + ``confirm_finalize`` mark the next transcript as finalized so the base
         class reports TTFS at the moment it arrives.
         """
-        await super().process_frame(frame, direction)
-
         if isinstance(frame, VADUserStartedSpeakingFrame):
             self._telemetry_vad_starts += 1
+            self._telemetry_user_speaking = True
             if self._telemetry_final_frames:
                 self._telemetry_early_final = True
                 self._telemetry_started_after_final += 1
+            if self._single_finalize_mode:
+                await self._cancel_single_finalize_timer(clear_pending=True)
+
+        await super().process_frame(frame, direction)
 
         if isinstance(frame, VADUserStoppedSpeakingFrame):
             self._telemetry_vad_stops += 1
-            self.request_finalize()
-            await self._send_reset(finalize=True)
+            self._telemetry_user_speaking = False
+            if self._single_finalize_mode:
+                await self._arm_single_finalize_timer()
+            else:
+                self.request_finalize()
+                await self._send_reset(finalize=True)
 
     async def _receive_messages(self):
         if not self._websocket:
@@ -257,11 +401,22 @@ class NemotronLocalSTTService(WebsocketSTTService):
         text = (data.get("text") or "").strip()
         if not text:
             return
+        is_finalize_final = data.get("is_final") and data.get("finalize") is True
+        if self._single_finalize_mode and not is_finalize_final:
+            await self.push_frame(
+                InterimTranscriptionFrame(
+                    text, self._user_id, time_now_iso8601(), None
+                )
+            )
+            return
+
         if data.get("is_final"):
             # Hard-reset final: server already dedups to the new delta, which
             # (one connection per sample) is the full utterance transcript.
             self.confirm_finalize()
             self._telemetry_final_frames += 1
+            if self._telemetry_user_speaking:
+                self._telemetry_early_final = True
             await self.push_frame(
                 TranscriptionFrame(text, self._user_id, time_now_iso8601(), None)
             )

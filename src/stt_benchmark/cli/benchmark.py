@@ -168,8 +168,8 @@ def run_benchmark(
                         total=len(pending),
                     )
 
-                    def callback(current, total, sample_id):
-                        progress.update(task, completed=current)
+                    def callback(current, total, sample_id, task_id=task):
+                        progress.update(task_id, completed=current)
 
                     results = await runner.benchmark_batch(
                         pending,

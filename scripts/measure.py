@@ -17,6 +17,7 @@ import random
 import re
 import sqlite3
 import tarfile
+import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -38,6 +39,17 @@ SLICE_A_PATH = SLICES_DIR / "slice_A_dataset_index_0_199.json"
 SLICE_B_PATH = SLICES_DIR / "slice_B_duration_stratified_seed1234.json"
 VAD_PREFLIGHT_PATH = DATA_DIR / "vad_preflight_silero_stop0.2.json"
 DEFAULT_MODEL = "nvidia/nemotron-speech-streaming-en-0.6b"
+RC1_RIGHT_CONTEXT_MS = 160.0
+PRODUCTION_FINALIZE_BUDGET_MS = 400.0
+FINALIZE_TIMING_FIELDS = (
+    "vad_stop",
+    "debounce_expiry",
+    "fork_flush_start",
+    "fork_flush_done",
+    "final_sent",
+    "final_received",
+    "inference_lock_acquire_wait_ms",
+)
 
 
 @dataclass(frozen=True)
@@ -510,6 +522,167 @@ def load_telemetry(tag: str, telemetry_dir: Path = CLIENT_TELEMETRY_DIR) -> list
     return rows
 
 
+def float_or_none(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def flatten_finalize_events(telemetry: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    flattened: list[dict[str, Any]] = []
+    for row in telemetry:
+        row_events = row.get("finalize_events")
+        if isinstance(row_events, list) and row_events:
+            for event_index, event in enumerate(row_events):
+                if not isinstance(event, dict):
+                    continue
+                flattened.append(
+                    {
+                        "run_tag": row.get("run_tag"),
+                        "benchmark_batch_index": row.get("benchmark_batch_index"),
+                        "finalize_event_index": event_index,
+                        **event,
+                    }
+                )
+            continue
+
+        if any(field in row for field in FINALIZE_TIMING_FIELDS):
+            flattened.append(
+                {
+                    "run_tag": row.get("run_tag"),
+                    "benchmark_batch_index": row.get("benchmark_batch_index"),
+                    "finalize_event_index": 0,
+                    **{field: row.get(field) for field in FINALIZE_TIMING_FIELDS if field in row},
+                }
+            )
+    return flattened
+
+
+def summarize_ms(values: list[float]) -> dict[str, float | int | None]:
+    return {
+        "count": len(values),
+        "median_ms": median(values) if values else None,
+        "p95_ms": percentile(values, 95),
+    }
+
+
+def format_ms(value: float | None) -> str:
+    return "n/a" if value is None else f"{value:.1f} ms"
+
+
+def print_finalize_budget(
+    *,
+    tag: str,
+    telemetry_tag: str | None,
+    telemetry_dir: Path,
+    rc1_ms: float,
+    budget_ms: float,
+) -> dict[str, Any]:
+    telemetry_name = telemetry_tag if telemetry_tag is not None else tag
+    telemetry = load_telemetry(telemetry_name, telemetry_dir=telemetry_dir)
+    events = flatten_finalize_events(telemetry)
+
+    endpoint_wait_ms: list[float] = []
+    finalize_flush_ms: list[float] = []
+    transport_ms: list[float] = []
+    total_budget_ms: list[float] = []
+    inference_lock_wait_ms: list[float] = []
+
+    for event in events:
+        vad_stop = float_or_none(event.get("vad_stop"))
+        debounce_expiry = float_or_none(event.get("debounce_expiry"))
+        fork_flush_start = float_or_none(event.get("fork_flush_start"))
+        final_sent = float_or_none(event.get("final_sent"))
+        final_received = float_or_none(event.get("final_received"))
+        lock_wait = float_or_none(event.get("inference_lock_acquire_wait_ms"))
+
+        endpoint = None
+        finalize_flush = None
+        transport = None
+        if vad_stop is not None and debounce_expiry is not None:
+            endpoint = max(0.0, (debounce_expiry - vad_stop) * 1000.0)
+            endpoint_wait_ms.append(endpoint)
+        if fork_flush_start is not None and final_sent is not None:
+            finalize_flush = max(0.0, (final_sent - fork_flush_start) * 1000.0)
+            finalize_flush_ms.append(finalize_flush)
+        if final_sent is not None and final_received is not None:
+            transport = max(0.0, (final_received - final_sent) * 1000.0)
+            transport_ms.append(transport)
+        if lock_wait is not None:
+            inference_lock_wait_ms.append(max(0.0, lock_wait))
+        if endpoint is not None and finalize_flush is not None and transport is not None:
+            total_budget_ms.append(endpoint + rc1_ms + finalize_flush + transport)
+
+    endpoint_summary = summarize_ms(endpoint_wait_ms)
+    finalize_summary = summarize_ms(finalize_flush_ms)
+    transport_summary = summarize_ms(transport_ms)
+    total_summary = summarize_ms(total_budget_ms)
+    lock_summary = summarize_ms(inference_lock_wait_ms)
+    total_p95 = total_summary["p95_ms"]
+    passed = bool(total_p95 is not None and total_p95 < budget_ms)
+
+    payload = {
+        "tag": tag,
+        "telemetry_tag": telemetry_name,
+        "telemetry_count": len(telemetry),
+        "finalize_event_count": len(events),
+        "rc1_model_constant_ms": rc1_ms,
+        "budget_ms": budget_ms,
+        "endpoint_wait": endpoint_summary,
+        "measured_finalize_flush_wallclock": finalize_summary,
+        "transport": transport_summary,
+        "inference_lock_acquire_wait": lock_summary,
+        "budget_formula_total": total_summary,
+        "pass": passed,
+    }
+
+    print(
+        f"tag={display_tag(tag)} finalize_budget telemetry_tag={display_tag(telemetry_name)} "
+        f"telemetry_n={len(telemetry)} finalize_events={len(events)}"
+    )
+    print(
+        "  scope: single-session / sequential-benchmark observer latency "
+        "(locked-Rule measurement), not concurrent-production latency"
+    )
+    print(
+        "  endpoint_wait(vad_stop->debounce_expiry): "
+        f"median={format_ms(endpoint_summary['median_ms'])} "
+        f"p95={format_ms(endpoint_summary['p95_ms'])} "
+        f"n={endpoint_summary['count']}"
+    )
+    print(
+        "  measured_finalize_flush_wallclock(fork_flush_start->final_sent): "
+        f"median={format_ms(finalize_summary['median_ms'])} "
+        f"p95={format_ms(finalize_summary['p95_ms'])} "
+        f"n={finalize_summary['count']}"
+    )
+    print(
+        "  transport(final_sent->final_received): "
+        f"median={format_ms(transport_summary['median_ms'])} "
+        f"p95={format_ms(transport_summary['p95_ms'])} "
+        f"n={transport_summary['count']}"
+    )
+    print(
+        "  inference_lock_acquire_wait: "
+        f"median={format_ms(lock_summary['median_ms'])} "
+        f"p95={format_ms(lock_summary['p95_ms'])} "
+        f"n={lock_summary['count']}"
+    )
+    print(
+        "  budget_formula_total="
+        f"endpoint_wait + rc1({rc1_ms:.1f} ms model constant) + "
+        "measured_finalize_flush_wallclock + transport: "
+        f"median={format_ms(total_summary['median_ms'])} "
+        f"p95={format_ms(total_summary['p95_ms'])} "
+        f"n={total_summary['count']} "
+        f"=> {'PASS' if passed else 'FAIL'} < {budget_ms:.1f} ms p95"
+    )
+    return payload
+
+
 def print_ttfb_and_counters(
     conn: sqlite3.Connection,
     *,
@@ -743,6 +916,19 @@ def telemetry_smoke(tag: str) -> Path:
     service._telemetry_final_frames = 1
     service._telemetry_early_final = True
     service._telemetry_started_after_final = 1
+    start = time.time()
+    service._telemetry_finalize_events = [
+        {
+            "reason": "measure.py-smoke",
+            "vad_stop": start,
+            "debounce_expiry": start + 0.150,
+            "fork_flush_start": start + 0.151,
+            "fork_flush_done": start + 0.176,
+            "final_sent": start + 0.178,
+            "final_received": start + 0.183,
+            "inference_lock_acquire_wait_ms": 1.5,
+        }
+    ]
     path = service._write_telemetry_once(reason="measure.py-smoke")
     if path is None:
         raise RuntimeError("telemetry smoke did not write a JSONL line")
@@ -797,6 +983,16 @@ def cmd_ttfb(args: argparse.Namespace) -> None:
             tag=normalize_tag(args.tag),
             telemetry_tag=args.telemetry_tag,
         )
+
+
+def cmd_finalize_budget(args: argparse.Namespace) -> None:
+    print_finalize_budget(
+        tag=normalize_tag(args.tag),
+        telemetry_tag=args.telemetry_tag,
+        telemetry_dir=args.telemetry_dir,
+        rc1_ms=args.rc1_ms,
+        budget_ms=args.budget_ms,
+    )
 
 
 def cmd_vad_preflight(args: argparse.Namespace) -> None:
@@ -867,6 +1063,14 @@ def cmd_self_check(args: argparse.Namespace) -> None:
     print("\nTelemetry smoke")
     smoke_path = telemetry_smoke(args.telemetry_smoke_tag)
     print(f"  telemetry -> {smoke_path}")
+    print("\nFinalize budget smoke")
+    print_finalize_budget(
+        tag=args.telemetry_smoke_tag,
+        telemetry_tag=args.telemetry_smoke_tag,
+        telemetry_dir=CLIENT_TELEMETRY_DIR,
+        rc1_ms=RC1_RIGHT_CONTEXT_MS,
+        budget_ms=PRODUCTION_FINALIZE_BUDGET_MS,
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -902,6 +1106,27 @@ def build_parser() -> argparse.ArgumentParser:
     ttfb.add_argument("--tag", default="", help="DB model_name tag")
     ttfb.add_argument("--telemetry-tag", default=None, help="Telemetry JSONL tag")
     ttfb.set_defaults(func=cmd_ttfb)
+
+    budget = subparsers.add_parser(
+        "finalize-budget",
+        help="Report Step-7d finalize JSONL latency budget for a tag",
+    )
+    budget.add_argument("--tag", default="fork", help="Run/model tag")
+    budget.add_argument("--telemetry-tag", default=None, help="Telemetry JSONL tag")
+    budget.add_argument("--telemetry-dir", type=Path, default=CLIENT_TELEMETRY_DIR)
+    budget.add_argument(
+        "--rc1-ms",
+        type=float,
+        default=RC1_RIGHT_CONTEXT_MS,
+        help="Modeled rc1 right-context contribution in milliseconds",
+    )
+    budget.add_argument(
+        "--budget-ms",
+        type=float,
+        default=PRODUCTION_FINALIZE_BUDGET_MS,
+        help="p95 production budget threshold in milliseconds",
+    )
+    budget.set_defaults(func=cmd_finalize_budget)
 
     vad = subparsers.add_parser("vad-preflight", help="Run offline Silero VAD preflight")
     add_common_args(vad)

@@ -29,6 +29,7 @@ import json
 import os
 import re
 import threading
+import time
 from pathlib import Path
 
 from loguru import logger
@@ -126,6 +127,7 @@ class NemotronLocalSTTService(WebsocketSTTService):
             os.environ.get("NEMOTRON_FINALIZE_MODE", "").strip().lower()
         )
         self._single_finalize_mode = self._finalize_mode == "single"
+        self._continuous_context = os.environ.get("NEMOTRON_CONTINUOUS", "") == "1"
         self._finalize_silence_ms = _DEFAULT_FINALIZE_SILENCE_MS
         if self._single_finalize_mode:
             self._finalize_silence_ms = _env_int(
@@ -159,6 +161,8 @@ class NemotronLocalSTTService(WebsocketSTTService):
         self._telemetry_early_final = False
         self._telemetry_started_after_final = 0
         self._telemetry_user_speaking = False
+        self._telemetry_finalize_events: list[dict] = []
+        self._telemetry_last_vad_stop: float | None = None
 
     def can_generate_metrics(self) -> bool:
         """Whether this service can generate processing metrics."""
@@ -385,10 +389,12 @@ class NemotronLocalSTTService(WebsocketSTTService):
         if isinstance(frame, VADUserStartedSpeakingFrame):
             self._telemetry_vad_starts += 1
             self._telemetry_user_speaking = True
-            if self._telemetry_final_frames:
+            if self._telemetry_final_frames and not self._continuous_context:
                 self._telemetry_early_final = True
                 self._telemetry_started_after_final += 1
-            if self._final_transcription_committed and not self._single_finalize_mode:
+            if self._final_transcription_committed and (
+                not self._single_finalize_mode or self._continuous_context
+            ):
                 self._final_transcription_committed = False
             if self._single_finalize_mode:
                 await self._cancel_single_finalize_timer(clear_pending=True)
@@ -401,6 +407,7 @@ class NemotronLocalSTTService(WebsocketSTTService):
         if isinstance(frame, VADUserStoppedSpeakingFrame):
             self._telemetry_vad_stops += 1
             self._telemetry_user_speaking = False
+            self._telemetry_last_vad_stop = time.time()
             await self._send_vad_signal("vad_stop")
             if self._single_finalize_mode:
                 await self._arm_single_finalize_timer()
@@ -428,6 +435,7 @@ class NemotronLocalSTTService(WebsocketSTTService):
                 await self._report_error(ErrorFrame(f"Server error: {err}"))
 
     async def _handle_transcript(self, data: dict):
+        received_at = time.time()
         text = (data.get("text") or "").strip()
         is_finalize_final = bool(data.get("is_final")) and data.get("finalize") is True
         if not text:
@@ -442,7 +450,7 @@ class NemotronLocalSTTService(WebsocketSTTService):
             )
             return
 
-        if text == self._last_final_transcription_text:
+        if text == self._last_final_transcription_text and not self._continuous_context:
             self._finalize_requested = False
             return
         if not self._finalize_requested:
@@ -457,9 +465,30 @@ class NemotronLocalSTTService(WebsocketSTTService):
         self._telemetry_final_frames += 1
         if self._telemetry_user_speaking:
             self._telemetry_early_final = True
+        self._record_finalize_timing(data, final_received=received_at)
         await self.push_frame(
             TranscriptionFrame(text, self._user_id, time_now_iso8601(), None)
         )
+
+    def _record_finalize_timing(self, data: dict, *, final_received: float) -> None:
+        timing = data.get("finalize_timing")
+        event: dict = {}
+        if isinstance(timing, dict):
+            for key in (
+                "reason",
+                "vad_stop",
+                "debounce_expiry",
+                "fork_flush_start",
+                "fork_flush_done",
+                "final_sent",
+                "inference_lock_acquire_wait_ms",
+            ):
+                if key in timing:
+                    event[key] = timing[key]
+        if "vad_stop" not in event and self._telemetry_last_vad_stop is not None:
+            event["vad_stop"] = self._telemetry_last_vad_stop
+        event["final_received"] = final_received
+        self._telemetry_finalize_events.append(event)
 
     def _write_telemetry_once(self, *, reason: str) -> Path | None:
         """Append one per-connection telemetry JSONL record when enabled."""
@@ -482,7 +511,21 @@ class NemotronLocalSTTService(WebsocketSTTService):
             "vad_starts": self._telemetry_vad_starts,
             "vad_stops": self._telemetry_vad_stops,
             "started_after_final_count": self._telemetry_started_after_final,
+            "finalize_events": self._telemetry_finalize_events,
         }
+        if self._telemetry_finalize_events:
+            first_event = self._telemetry_finalize_events[0]
+            for key in (
+                "vad_stop",
+                "debounce_expiry",
+                "fork_flush_start",
+                "fork_flush_done",
+                "final_sent",
+                "final_received",
+                "inference_lock_acquire_wait_ms",
+            ):
+                if key in first_event:
+                    payload[key] = first_event[key]
         with path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(payload, sort_keys=True) + "\n")
         return path

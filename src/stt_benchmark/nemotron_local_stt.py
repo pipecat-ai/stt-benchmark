@@ -13,6 +13,8 @@ old manual ``MetricsFrame`` emission and frame-ordering workarounds are gone.
 Server protocol (see src/nemotron_speech/server.py):
 - On connect the server sends ``{"type": "ready"}``.
 - Audio is sent as raw 16-bit PCM, 16 kHz, mono.
+- VAD state is sent as ``{"type": "vad_start"}`` and
+  ``{"type": "vad_stop"}``.
 - Interim results arrive as ``{"type": "transcript", "is_final": false, ...}``.
 - Sending ``{"type": "reset", "finalize": true}`` triggers a hard reset:
   the server pads + finalizes, replies with a final (delta) transcript as
@@ -267,6 +269,20 @@ class NemotronLocalSTTService(WebsocketSTTService):
             logger.error(f"{self} failed to send reset: {e}")
             return False
 
+    async def _send_vad_signal(self, signal_type: str) -> bool:
+        """Send a declarative VAD state signal to the server."""
+        if not (self._websocket and self._ready):
+            return False
+        try:
+            async with self._audio_send_lock:
+                if not (self._websocket and self._ready):
+                    return False
+                await self._websocket.send(json.dumps({"type": signal_type}))
+            return True
+        except Exception as e:
+            logger.error(f"{self} failed to send {signal_type}: {e}")
+            return False
+
     async def _send_finalize_reset(self) -> bool:
         """Send a hard reset, arming pipecat finalization only for that send."""
         sent = await self._send_reset(finalize=True, before_send=self.request_finalize)
@@ -379,9 +395,13 @@ class NemotronLocalSTTService(WebsocketSTTService):
 
         await super().process_frame(frame, direction)
 
+        if isinstance(frame, VADUserStartedSpeakingFrame):
+            await self._send_vad_signal("vad_start")
+
         if isinstance(frame, VADUserStoppedSpeakingFrame):
             self._telemetry_vad_stops += 1
             self._telemetry_user_speaking = False
+            await self._send_vad_signal("vad_stop")
             if self._single_finalize_mode:
                 await self._arm_single_finalize_timer()
             else:

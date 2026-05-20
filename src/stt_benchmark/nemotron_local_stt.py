@@ -128,6 +128,7 @@ class NemotronLocalSTTService(WebsocketSTTService):
         )
         self._single_finalize_mode = self._finalize_mode == "single"
         self._continuous_context = os.environ.get("NEMOTRON_CONTINUOUS", "") == "1"
+        self._eou_client_accept = os.environ.get("NEMOTRON_EOU_CLIENT", "") == "1"
         self._finalize_silence_ms = _DEFAULT_FINALIZE_SILENCE_MS
         if self._single_finalize_mode:
             self._finalize_silence_ms = _env_int(
@@ -453,7 +454,9 @@ class NemotronLocalSTTService(WebsocketSTTService):
         if text == self._last_final_transcription_text and not self._continuous_context:
             self._finalize_requested = False
             return
-        if not self._finalize_requested:
+        if not self._finalize_requested and not (
+            self._eou_client_accept and self._continuous_context
+        ):
             logger.debug(f"{self} ignoring unarmed finalize transcript: '{text}'")
             return
 

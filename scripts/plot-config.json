@@ -11,8 +11,7 @@
     "openai_realtime",
     "smallest",
     "soniox",
-    "speechmatics",
-    "xai"
+    "speechmatics"
   ],
   "display_names": {
     "assemblyai": "AssemblyAI",
@@ -26,8 +25,7 @@
     "openai_realtime": "OpenAI",
     "smallest": "Smallest AI",
     "soniox": "Soniox",
-    "speechmatics": "Speechmatics",
-    "xai": "XAI"
+    "speechmatics": "Speechmatics"
   },
   "latency": ["median", "p95"],
   "output": "assets/"

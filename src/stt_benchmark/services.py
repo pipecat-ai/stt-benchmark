@@ -70,6 +70,79 @@ class ServiceDefinition:
     needs_aiohttp: bool = False
 
 
+@dataclass(frozen=True)
+class NemotronLocalRoute:
+    """Resolved endpoint for a local Nemotron server process."""
+
+    model_name: str
+    url: str
+    language: str | None = None
+
+
+_NEMOTRON_ENGLISH_ALIASES = {
+    "en",
+    "english",
+    "nemotron-speech-streaming-en-0.6b",
+    "nvidia/nemotron-speech-streaming-en-0.6b",
+}
+_NEMOTRON_MULTILINGUAL_ALIASES = {
+    "ml",
+    "multilingual",
+    "nemotron-speech-streaming-multilingual-0.6b",
+    "nvidia/nemotron-3.5-asr-streaming-multilingual-0.6b",
+    "nvidia-nemotron-3.5-asr-streaming-multilingual-0.6b",
+}
+
+
+def _clean_optional(value: str | None) -> str | None:
+    if value is None:
+        return None
+    value = value.strip()
+    return value or None
+
+
+def _resolve_nemotron_model_key(model_name: str | None) -> str:
+    normalized = _clean_optional(model_name)
+    if normalized is None:
+        return "english"
+
+    lowered = normalized.lower()
+    if lowered in _NEMOTRON_ENGLISH_ALIASES or "streaming-en" in lowered:
+        return "english"
+    if lowered in _NEMOTRON_MULTILINGUAL_ALIASES or "multilingual" in lowered:
+        return "multilingual"
+    raise ValueError(
+        f"Unknown local Nemotron model {model_name!r}; expected english or multilingual"
+    )
+
+
+def resolve_nemotron_local_route(
+    model_name: str | None = None,
+    language: str | None = None,
+) -> NemotronLocalRoute:
+    """Resolve model_name/language into the local server endpoint."""
+
+    requested_model = (
+        _clean_optional(model_name)
+        or _clean_optional(_get_env_from_config("NEMOTRON_LOCAL_MODEL_NAME"))
+    )
+    target_language = (
+        _clean_optional(language)
+        or _clean_optional(_get_env_from_config("NEMOTRON_LOCAL_LANGUAGE"))
+    )
+    model_key = _resolve_nemotron_model_key(requested_model)
+
+    english_url = _get_env_from_config("NEMOTRON_LOCAL_URL") or "ws://localhost:8080"
+    multilingual_url = _get_env_from_config("NEMOTRON_LOCAL_ML_URL") or english_url
+    url = multilingual_url if model_key == "multilingual" else english_url
+
+    return NemotronLocalRoute(
+        model_name=model_key,
+        url=url,
+        language=target_language,
+    )
+
+
 # =============================================================================
 # SERVICE FACTORY FUNCTIONS
 # =============================================================================
@@ -260,14 +333,21 @@ def create_nvidia_sagemaker() -> FrameProcessor:
     )
 
 
-def create_nemotron_local() -> FrameProcessor:
+def create_nemotron_local(
+    model_name: str | None = None,
+    language: str | None = None,
+) -> FrameProcessor:
     # Self-hosted Nemotron streaming ASR (src/nemotron_speech/server.py).
-    # Requires that server to be running; no API key. Override the URL with
-    # NEMOTRON_LOCAL_URL (defaults to ws://localhost:8080).
+    # Requires the selected server process to be running; no API key. The
+    # English endpoint defaults to NEMOTRON_LOCAL_URL/ws://localhost:8080;
+    # multilingual uses NEMOTRON_LOCAL_ML_URL when set, else NEMOTRON_LOCAL_URL.
     from stt_benchmark.nemotron_local_stt import NemotronLocalSTTService
 
+    route = resolve_nemotron_local_route(model_name=model_name, language=language)
     return NemotronLocalSTTService(
-        url=_get_env_from_config("NEMOTRON_LOCAL_URL") or "ws://localhost:8080",
+        url=route.url,
+        target_language=route.language,
+        model_name=route.model_name,
     )
 
 
@@ -504,6 +584,8 @@ def is_service_available(name: str) -> bool:
 def create_stt_service(
     service_name: "ServiceName",
     aiohttp_session: "aiohttp.ClientSession | None" = None,
+    model_name: str | None = None,
+    language: str | None = None,
 ) -> FrameProcessor:
     """Create an STT service instance using its factory function.
 
@@ -511,6 +593,8 @@ def create_stt_service(
         service_name: The STT service to create.
         aiohttp_session: Optional aiohttp session for services that require one
             (i.e. services with needs_aiohttp=True in their ServiceDefinition).
+        model_name: Optional model selector for services that support routing.
+        language: Optional language selector for services that support routing.
 
     Returns:
         Configured STT service instance.
@@ -530,6 +614,9 @@ def create_stt_service(
                 f"but none was provided. The pipeline runner should create one."
             )
         return definition.factory(aiohttp_session)
+
+    if service_name.value == "nemotron_local":
+        return create_nemotron_local(model_name=model_name, language=language)
 
     return definition.factory()
 

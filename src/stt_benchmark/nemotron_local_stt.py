@@ -11,7 +11,9 @@ TTFS automatically (speech-end -> finalized ``TranscriptionFrame``), so the
 old manual ``MetricsFrame`` emission and frame-ordering workarounds are gone.
 
 Server protocol (see src/nemotron_speech/server.py):
-- On connect the server sends ``{"type": "ready"}``.
+- Optional ``language`` and ``model`` query params are validated at connect.
+- On accepted connect the server sends ``{"type": "ready"}``.
+- Rejected connects receive ``{"type": "error", "message": ...}``.
 - Audio is sent as raw 16-bit PCM, 16 kHz, mono.
 - VAD state is sent as ``{"type": "vad_start"}`` and
   ``{"type": "vad_stop"}``.
@@ -31,6 +33,7 @@ import re
 import threading
 import time
 from pathlib import Path
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from loguru import logger
 from pipecat.frames.frames import (
@@ -108,6 +111,8 @@ class NemotronLocalSTTService(WebsocketSTTService):
         self,
         *,
         url: str = "ws://localhost:8080",
+        target_language: str | None = None,
+        model_name: str | None = None,
         sample_rate: int = 16000,
         **kwargs,
     ):
@@ -115,11 +120,15 @@ class NemotronLocalSTTService(WebsocketSTTService):
 
         Args:
             url: WebSocket URL of the local Nemotron ASR server.
+            target_language: Optional prompted-model language key, e.g. en-US.
+            model_name: Optional model identity passed with target_language.
             sample_rate: Audio sample rate; the server requires 16000.
             **kwargs: Additional arguments passed to WebsocketSTTService.
         """
         super().__init__(sample_rate=sample_rate, **kwargs)
         self._url = url
+        self._target_language = target_language.strip() if target_language else None
+        self._model_name = model_name.strip() if model_name else None
         self._receive_task = None
         self._ready = False
         self._audio_send_lock = asyncio.Lock()
@@ -164,6 +173,29 @@ class NemotronLocalSTTService(WebsocketSTTService):
         self._telemetry_user_speaking = False
         self._telemetry_finalize_events: list[dict] = []
         self._telemetry_last_vad_stop: float | None = None
+
+    def _connect_url(self) -> str:
+        if not self._target_language:
+            return self._url
+
+        split = urlsplit(self._url)
+        query = [
+            item
+            for item in parse_qsl(split.query, keep_blank_values=True)
+            if item[0] not in {"language", "model"}
+        ]
+        query.append(("language", self._target_language))
+        if self._model_name:
+            query.append(("model", self._model_name))
+        return urlunsplit(
+            (
+                split.scheme,
+                split.netloc,
+                split.path,
+                urlencode(query),
+                split.fragment,
+            )
+        )
 
     def can_generate_metrics(self) -> bool:
         """Whether this service can generate processing metrics."""
@@ -212,20 +244,29 @@ class NemotronLocalSTTService(WebsocketSTTService):
         try:
             if self._websocket:
                 return
-            logger.debug(f"{self} connecting to {self._url}")
-            self._websocket = await websocket_connect(self._url)
+            url = self._connect_url()
+            logger.debug(f"{self} connecting to {url}")
+            self._websocket = await websocket_connect(url)
             self._ready = False
-            try:
-                msg = await self._websocket.recv()
-                if json.loads(msg).get("type") == "ready":
-                    logger.debug(f"{self} server ready")
-                self._ready = True
-            except Exception as e:
-                logger.warning(f"{self} no ready message ({e}); proceeding anyway")
-                self._ready = True
+            msg = await self._websocket.recv()
+            if isinstance(msg, bytes):
+                msg = msg.decode("utf-8")
+            data = json.loads(msg)
+            msg_type = data.get("type")
+            if msg_type == "error":
+                message = data.get("message") or "Nemotron server rejected connection"
+                logger.error(f"{self} server rejected connection: {message}")
+                raise RuntimeError(message)
+            if msg_type != "ready":
+                raise RuntimeError(f"Expected ready from Nemotron server, got {data!r}")
+            logger.debug(f"{self} server ready")
+            self._ready = True
             await self._call_event_handler("on_connected")
         except Exception as e:
             logger.error(f"{self} connection failed: {e}")
+            if self._websocket:
+                with contextlib.suppress(Exception):
+                    await self._websocket.close()
             self._websocket = None
             raise
 

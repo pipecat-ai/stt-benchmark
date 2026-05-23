@@ -121,8 +121,7 @@ def create_cartesia() -> FrameProcessor:
 
 
 def create_deepgram() -> FrameProcessor:
-    from deepgram import LiveOptions
-    from pipecat.services.deepgram.stt import DeepgramSTTService
+    from pipecat.services.deepgram.stt import DeepgramSTTService, LiveOptions
 
     return DeepgramSTTService(
         api_key=_get_env("DEEPGRAM_API_KEY"),
@@ -133,6 +132,76 @@ def create_deepgram() -> FrameProcessor:
             language=Language.EN,
         ),
     )
+
+
+def create_aiphoria() -> FrameProcessor:
+    """Setup 1a: our ASR (asr-backend gRPC) + our native VAD-EOU."""
+    from stt_benchmark.services_aiphoria.aiphoria_stt import AiphoriaSTTService
+
+    return AiphoriaSTTService(mode="native_eou")
+
+
+def create_aiphoria_exteou() -> FrameProcessor:
+    """Setup 1b: our ASR + shared external Silero-VAD-EOU (eou.py)."""
+    from stt_benchmark.services_aiphoria.aiphoria_stt import AiphoriaSTTService
+
+    return AiphoriaSTTService(mode="external_eou")
+
+
+def create_deepgram_exteou() -> FrameProcessor:
+    """Setup 3: Deepgram ASR + shared external Silero-VAD-EOU (eou.py)."""
+    from stt_benchmark.services_aiphoria.deepgram_exteou import (
+        DeepgramExternalEouSTTService,
+    )
+
+    return DeepgramExternalEouSTTService(api_key=_get_env("DEEPGRAM_API_KEY"))
+
+
+def create_deepgram_native() -> FrameProcessor:
+    """Setup 2b: Deepgram ASR + Deepgram's own native endpointing (speech_final)."""
+    from stt_benchmark.services_aiphoria.deepgram_native import (
+        DeepgramNativeEouSTTService,
+    )
+
+    return DeepgramNativeEouSTTService(
+        api_key=_get_env("DEEPGRAM_API_KEY"), endpointing_ms=300
+    )
+
+
+def create_deepgram_proxy() -> FrameProcessor:
+    """Setup 4: Deepgram via production speech-proxy (gRPC v2, TLS, UtteranceEnd 1000ms)."""
+    from stt_benchmark.services_aiphoria.deepgram_proxy import (
+        DeepgramProxySTTService,
+    )
+
+    return DeepgramProxySTTService()
+
+
+def create_deepgram_proxy_v2() -> FrameProcessor:
+    """Setup 4b: identical speech-proxy path, re-measured after reported fix.
+
+    Same DeepgramProxySTTService (the change is server-side on the proxy, not
+    in our client). Separate service name so the pre-fix deepgram_proxy rows are
+    preserved for a before/after comparison.
+    """
+    from stt_benchmark.services_aiphoria.deepgram_proxy import (
+        DeepgramProxySTTService,
+    )
+
+    return DeepgramProxySTTService()
+
+
+def create_deepgram_proxy_vad_v2() -> FrameProcessor:
+    """Setup 4c: speech-proxy with the new recognizer asr_deepgram_en_nova3_vad_v2.
+
+    This is the actual server-side fix (faster VAD endpointing). Same
+    DeepgramProxySTTService client, only the recognizer differs.
+    """
+    from stt_benchmark.services_aiphoria.deepgram_proxy import (
+        DeepgramProxySTTService,
+    )
+
+    return DeepgramProxySTTService(recognizer="asr_deepgram_en_nova3_vad_v2")
 
 
 def create_elevenlabs() -> FrameProcessor:
@@ -364,6 +433,34 @@ STT_SERVICES: dict[str, ServiceDefinition] = {
     "deepgram": ServiceDefinition(
         factory=create_deepgram,
         required_env_vars=["DEEPGRAM_API_KEY"],
+    ),
+    "aiphoria": ServiceDefinition(
+        factory=create_aiphoria,
+        required_env_vars=[],
+    ),
+    "aiphoria_exteou": ServiceDefinition(
+        factory=create_aiphoria_exteou,
+        required_env_vars=[],
+    ),
+    "deepgram_exteou": ServiceDefinition(
+        factory=create_deepgram_exteou,
+        required_env_vars=["DEEPGRAM_API_KEY"],
+    ),
+    "deepgram_native": ServiceDefinition(
+        factory=create_deepgram_native,
+        required_env_vars=["DEEPGRAM_API_KEY"],
+    ),
+    "deepgram_proxy": ServiceDefinition(
+        factory=create_deepgram_proxy,
+        required_env_vars=[],  # TLS only; Deepgram key is server-side on the proxy
+    ),
+    "deepgram_proxy_v2": ServiceDefinition(
+        factory=create_deepgram_proxy_v2,
+        required_env_vars=[],  # TLS only; Deepgram key is server-side on the proxy
+    ),
+    "deepgram_proxy_vad_v2": ServiceDefinition(
+        factory=create_deepgram_proxy_vad_v2,
+        required_env_vars=[],  # TLS only; Deepgram key is server-side on the proxy
     ),
     "elevenlabs": ServiceDefinition(
         factory=create_elevenlabs,

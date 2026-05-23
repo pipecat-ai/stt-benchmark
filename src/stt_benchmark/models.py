@@ -36,6 +36,14 @@ class ServiceName(str, Enum):
     SPEECHMATICS = "speechmatics"
     SONIOX = "soniox"
     WHISPER = "whisper"
+    # Aiphoria benchmark setups (this task)
+    AIPHORIA = "aiphoria"  # setup 1a: our ASR + our native VAD-EOU
+    AIPHORIA_EXTEOU = "aiphoria_exteou"  # setup 1b: our ASR + shared external EOU
+    DEEPGRAM_EXTEOU = "deepgram_exteou"  # setup 3: Deepgram ASR + shared external EOU
+    DEEPGRAM_NATIVE = "deepgram_native"  # setup 2b: Deepgram ASR + Deepgram native endpointing
+    DEEPGRAM_PROXY = "deepgram_proxy"  # setup 4: Deepgram via production speech-proxy (gRPC v2, UtteranceEnd 1000ms)
+    DEEPGRAM_PROXY_V2 = "deepgram_proxy_v2"  # setup 4b: same speech-proxy path, re-measured 2026-05-21 after reported server-side fix
+    DEEPGRAM_PROXY_VAD_V2 = "deepgram_proxy_vad_v2"  # setup 4c: speech-proxy, new recognizer asr_deepgram_en_nova3_vad_v2 (faster VAD endpointing)
 
 
 class AudioSample(BaseModel):

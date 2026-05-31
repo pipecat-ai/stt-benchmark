@@ -1,3 +1,126 @@
+# Measuring our (Aiphoria) STT — in-house quickstart
+
+> Local fork of pipecat-ai/stt-benchmark, extended with our deploy stack. This
+> top section is the in-house guide for benchmarking **our** ASR; the upstream
+> docs follow below.
+
+## What "ours" means here
+
+"Ours" covers **two families** of registered services — both defined in
+`src/stt_benchmark/services.py` and registered in `src/stt_benchmark/models.py`.
+All report TTFS on the same shared clock, so they're directly comparable.
+
+**A. Direct asr-backend path** — our own ASR stack (Triton `asr-en-ensemble` +
+`asr-backend-service` gRPC v2, model `hf/aiphoria_english_asr_v2_160ms` CTC):
+
+| service name | setup | what it measures |
+|---|---|---|
+| `aiphoria` | 1a | our ASR + our **native in-Triton VAD-EOU** (`max_silence_ms=640`); final on backend `is_final` with `eou_reason` organic/repeating. **True product latency.** |
+| `aiphoria_exteou` | 1b | our ASR + the **shared external `eou.py`** (640 ms rule), finalization decided client-side. Read the **1a − 1b gap** as our in-Triton/gRPC EOU overhead. |
+
+**B. Production speech-proxy path** — Deepgram reached **through our** staging
+speech-proxy (`speech-proxy.main.stage.aiphoria.pro:443`, same platform_proto v2
+gRPC API, TLS). This is the real production integration path and where the
+**Deepgram VAD-fix recognizers** are measured. All three use the same
+`DeepgramProxySTTService` client (`services_aiphoria/deepgram_proxy.py`); only the
+server-side recognizer differs. The proxy finalizes on the **first** `is_final`
+with non-empty text (`eou_reason`-agnostic):
+
+| service name | setup | recognizer / what it measures |
+|---|---|---|
+| `deepgram_proxy` | 4 | `asr_deepgram_en_nova3` — proxy-native Deepgram UtteranceEnd (`utterance_end_ms=1000`). Baseline production path (2026-05-19). |
+| `deepgram_proxy_v2` | 4b | same recognizer, re-measured after a reported server-side proxy fix (2026-05-21). Separate name preserves the 4 rows for before/after. |
+| `deepgram_proxy_vad_v2` | 4c→refix | `asr_deepgram_en_nova3_vad_v2` — the **faster-VAD-endpointing recognizer** (the fix we track). ⚠️ premature endpointing truncates long turns / fires before the anchor → those turns become *unmeasurable* (see caveat below). |
+
+(For contrast the harness also has the **non-ours** direct-Deepgram-cloud setups
+`deepgram` (2), `deepgram_native` (2b), `deepgram_exteou` (3) — those need
+`DEEPGRAM_API_KEY`.)
+
+Metric = TTFS (pipecat TTFB instrumentation): final `TranscriptionFrame` receipt
+− (Silero VAD stop − `--vad-stop-secs`, default 0.2 s). A final that fires
+*before* that anchor is unmeasurable, so premature endpointing shows up as a
+*missing* sample, not a fast one. Results go to `stt_benchmark_data/results.db`
+(or `test.db` with `--test`). Sample selection (dataset
+`pipecat-ai/smart-turn-data-v3.1-train`, seed 42) lives in
+`src/stt_benchmark/config.py` (env prefix `STT_BENCHMARK_`, `.env`), **not** as
+`run` flags; concurrency is 1.
+
+## Prerequisites
+
+1. **Audio present** — download once into `stt_benchmark_data/audio/`:
+   ```bash
+   uv run stt-benchmark download --num-samples 100
+   ```
+2. **Target reachable** — the benchmark is only a gRPC **client**; the target is
+   **hardcoded per service**, no env var or CLI flag:
+   - *aiphoria / aiphoria_exteou* → `localhost:50052`, `grpc.aio.insecure_channel`,
+     `language_id="en"` (`AiphoriaSTTService.__init__`). The `asr-backend-service`
+     (fronting Triton) must already be running. **No API key.**
+   - *deepgram_proxy\** → `speech-proxy.main.stage.aiphoria.pro:443`,
+     `grpc.aio.secure_channel` (TLS), recognizer passed as `language_id`
+     (`PROXY_TARGET` / `PROXY_RECOGNIZER` in `deepgram_proxy.py`). The proxy talks
+     to Deepgram server-side, so the **client needs no `DEEPGRAM_API_KEY`** — only
+     network reach to the proxy.
+
+   To point at a different backend/proxy, recognizer, or toggle TLS, edit the
+   `create_*` factory in `src/stt_benchmark/services.py` (or the `PROXY_*`
+   constants), not a flag.
+
+## Concrete commands
+
+```bash
+# Always run from the harness dir, via its uv env:
+cd /home/mle/asr-junk/danil-andreev/tasks/deepgram_vs_ours_latency/stt-benchmark
+
+# --- A. direct asr-backend path (our ASR) ---
+# 1. Smoke-test: 2 samples into the throwaway --test DB
+uv run stt-benchmark run --services aiphoria --limit 2 --test
+# 2. Full product-latency run (Setup 1a)
+uv run stt-benchmark run --services aiphoria --limit 100 --no-skip-existing
+# 3. Both of ours in one run (comma-separated) -> gives the 1a vs 1b gap
+uv run stt-benchmark run --services aiphoria,aiphoria_exteou --limit 100 --no-skip-existing
+
+# --- B. production speech-proxy path (Deepgram + our proxy / VAD-fix recognizers) ---
+# 4. Smoke the proxy + the vad_v2 fix recognizer first (cheap, throwaway DB)
+uv run stt-benchmark run --services deepgram_proxy_vad_v2 --limit 2 --test
+# 5. Full re-measure of the vad_v2 fix (the recognizer we track)
+uv run stt-benchmark run --services deepgram_proxy_vad_v2 --limit 100 --no-skip-existing
+# 6. Before/after across the proxy recognizers in one shot
+uv run stt-benchmark run --services deepgram_proxy,deepgram_proxy_v2,deepgram_proxy_vad_v2 \
+    --limit 100 --no-skip-existing
+
+# --- tuning + reporting (apply to either path) ---
+# 7. Tighten / loosen the speech-end anchor
+uv run stt-benchmark run --services aiphoria --limit 100 --vad-stop-secs 0.3 --no-skip-existing
+# 8. Aggregate -> report
+uv run stt-benchmark report               # built-in reporter (all services in the DB)
+uv run python ../make_report.py           # task's curated TTFS table+json into ../results/
+# For the proxy/vad_v2 path also run the validity-aware analysis (kept% + early-final gate):
+uv run python ../analyze_vad_v2_refix_20260530.py
+```
+
+`run` flags (`src/stt_benchmark/cli/benchmark.py`, registered as `run` in
+`cli/main.py`): `--services/-s` (comma-separated names, or `all`), `--limit/-n N`,
+`--model/-m`, `--skip-existing/--no-skip-existing` (default **skip**; pass
+`--no-skip-existing` to re-measure rows already in the DB), `--vad-stop-secs/-v`
+(default 0.2), `--test/-t` (use the separate test DB so you don't touch the real
+`results.db`). Those are the **only** `run` flags — seed/dataset come from config.
+
+> ⚠️ **Validity caveat for `deepgram_proxy_vad_v2`.** Its aggressive VAD often
+> endpoints before the Silero speech-end anchor and/or truncates long turns, so a
+> raw TTFS percentile over the DB is misleading. Gate on transcript completeness
+> (kept% vs the full-turn `deepgram_proxy` reference) and drop early/no-TTFB rows
+> before reading latency — that's exactly what `../analyze_vad_v2_refix_20260530.py`
+> does. See `../README.md` (task root) for the full 2026-05-30 result.
+
+> Task-dir convention: give each real run its own launcher script + log/marker
+> (see `../run_*_*.sh`), and for a before/after on the same path, register a **new
+> service name** in `models.py` + `services.py` rather than overwriting existing
+> rows. Available commands: `run`, `download`, `report`, `ground-truth`, `wer`,
+> `export` (the registered service names live in `models.py`).
+
+---
+
 # STT Benchmark
 
 A framework for benchmarking Speech-to-Text services with TTFS (Time To Final Segment) latency and Semantic WER (Word Error Rate) accuracy measurement.

@@ -202,9 +202,9 @@ async def _show_all_services_summary(db_path: Path | None = None):
             console.print("\n[bold]Rankings (by Perfect %):[/bold]")
             ranked_perfect = sorted(
                 summaries_with_wer,
-                key=lambda x: x[3]["perfect_count"] / x[3]["sample_count"]
-                if x[3]["sample_count"] > 0
-                else 0,
+                key=lambda x: (
+                    x[3]["perfect_count"] / x[3]["sample_count"] if x[3]["sample_count"] > 0 else 0
+                ),
                 reverse=True,
             )
             for i, (service, model, _, wer_summary) in enumerate(ranked_perfect, 1):

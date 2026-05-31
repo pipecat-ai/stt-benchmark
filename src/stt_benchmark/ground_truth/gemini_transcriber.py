@@ -198,10 +198,10 @@ class GeminiTranscriber:
                 if save_incrementally:
                     await self.db.insert_ground_truth(gt)
                 text_preview = gt.text[:50] + "..." if len(gt.text) > 50 else gt.text
-                logger.info(f"[{i+1}/{len(samples)}] Transcribed: {text_preview}")
+                logger.info(f"[{i + 1}/{len(samples)}] Transcribed: {text_preview}")
             else:
                 logger.warning(
-                    f"[{i+1}/{len(samples)}] Failed to transcribe sample {sample.sample_id}"
+                    f"[{i + 1}/{len(samples)}] Failed to transcribe sample {sample.sample_id}"
                 )
 
         return results

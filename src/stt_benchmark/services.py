@@ -301,6 +301,16 @@ def create_groq() -> FrameProcessor:
     )
 
 
+def create_mistral() -> FrameProcessor:
+    from pipecat.services.mistral.stt import MistralSTTService
+
+    return MistralSTTService(
+        api_key=_get_env("MISTRAL_API_KEY"),
+        model="voxtral-mini-transcribe-realtime-2602",
+        language=Language.EN,
+    )
+
+
 def create_nvidia() -> FrameProcessor:
     from pipecat.services.nvidia.stt import NvidiaSTTService
 
@@ -406,6 +416,15 @@ def create_whisper() -> FrameProcessor:
     )
 
 
+def create_xai() -> FrameProcessor:
+    from pipecat.services.xai.stt import XAISTTService
+
+    return XAISTTService(
+        api_key=_get_env("XAI_API_KEY"),
+        language=Language.EN,
+    )
+
+
 # =============================================================================
 # SERVICE REGISTRY
 # =============================================================================
@@ -491,6 +510,10 @@ STT_SERVICES: dict[str, ServiceDefinition] = {
         factory=create_groq,
         required_env_vars=["GROQ_API_KEY"],
     ),
+    "mistral": ServiceDefinition(
+        factory=create_mistral,
+        required_env_vars=["MISTRAL_API_KEY"],
+    ),
     "nvidia": ServiceDefinition(
         factory=create_nvidia,
         required_env_vars=["NVIDIA_API_KEY"],
@@ -526,6 +549,10 @@ STT_SERVICES: dict[str, ServiceDefinition] = {
     "whisper": ServiceDefinition(
         factory=create_whisper,
         required_env_vars=[],  # Local model, no API key needed
+    ),
+    "xai": ServiceDefinition(
+        factory=create_xai,
+        required_env_vars=["XAI_API_KEY"],
     ),
 }
 

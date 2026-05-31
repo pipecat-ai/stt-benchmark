@@ -414,14 +414,19 @@ class SemanticWEREvaluator:
         for attempt in range(1, max_retries + 1):
             try:
                 return await self.client.messages.create(**request_payload)
-            except (anthropic.RateLimitError, anthropic.InternalServerError, anthropic.APIConnectionError) as e:
-                label = "rate limited" if isinstance(e, anthropic.RateLimitError) else "server error"
+            except (
+                anthropic.RateLimitError,
+                anthropic.InternalServerError,
+                anthropic.APIConnectionError,
+            ) as e:
+                label = (
+                    "rate limited" if isinstance(e, anthropic.RateLimitError) else "server error"
+                )
                 if attempt == max_retries:
                     raise
                 wait = 15 * (2 ** (attempt - 1))
                 logger.warning(
-                    f"{filename}: {label}, waiting {wait}s "
-                    f"(attempt {attempt}/{max_retries})"
+                    f"{filename}: {label}, waiting {wait}s (attempt {attempt}/{max_retries})"
                 )
             await asyncio.sleep(wait)
         raise RuntimeError("unreachable")
@@ -785,8 +790,7 @@ Show your work clearly, then call calculate_wer with your verified counts."""
                 )
             except asyncio.TimeoutError:
                 logger.warning(
-                    f"{filename}: timed out after {timeout_secs}s "
-                    f"(attempt {attempt}/{max_retries})"
+                    f"{filename}: timed out after {timeout_secs}s (attempt {attempt}/{max_retries})"
                 )
                 if attempt == max_retries:
                     logger.error(f"{filename}: failed after {max_retries} timeout retries")
@@ -886,7 +890,9 @@ Show your work clearly, then call calculate_wer with your verified counts."""
                 if progress_callback:
                     progress_callback(completed, len(samples), sample.sample_id)
 
-                logger.debug(f"[{completed}/{len(samples)}] {sample.sample_id}: WER={metrics.wer:.2%}")
+                logger.debug(
+                    f"[{completed}/{len(samples)}] {sample.sample_id}: WER={metrics.wer:.2%}"
+                )
 
         await asyncio.gather(*(_eval_sample(sample) for sample in samples))
 

@@ -117,7 +117,7 @@ def plot_pareto_frontier(
         texts,
         x=ttfb_values,
         y=wer_values,
-        arrowprops=dict(arrowstyle="-", color="gray", alpha=0.5),
+        arrowprops={"arrowstyle": "-", "color": "gray", "alpha": 0.5},
         expand=(1.2, 1.4),
         force_text=(0.5, 1.0),
     )

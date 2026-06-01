@@ -14,12 +14,12 @@ Benchmark results on 1000 samples from the `pipecat-ai/smart-turn-data-v3.1-trai
 | Cartesia | Ink Whisper | 100.0% | 84.2% | 1.47% | 1.25% | 299ms | 328ms | 1584ms |
 | Deepgram | Nova-3 General | 99.8% | 76.5% | 1.71% | 1.62% | 247ms | 298ms | 326ms |
 | ElevenLabs | Scribe v2 Realtime | 99.7% | 81.3% | 3.16% | 3.12% | 281ms | 348ms | 407ms |
-| Google | Cloud STT v2 (latest_long) | 100.0% | 69.0% | 2.84% | 2.85% | 878ms | 1155ms | 1570ms |
-| Mistral | Voxtral Mini | 99.3% | 68.8% | 4.44% | 4.97% | 525ms | 973ms | 1913ms |
+| Google | Chirp (latest_long) | 100.0% | 69.0% | 2.84% | 2.85% | 878ms | 1155ms | 1570ms |
+| Mistral | Voxtral Mini Realtime | 99.3% | 68.8% | 4.44% | 4.97% | 525ms | 973ms | 1913ms |
 | OpenAI | GPT-4o Mini Transcribe | 99.3% | 75.9% | 3.24% | 3.06% | 637ms | 965ms | 1655ms |
 | Smallest AI | Pulse | 100.0% | 72.4% | 2.30% | 2.37% | 398ms | 533ms | 1593ms |
 | Soniox | STT-RT v4 | 99.8% | 84.1% | 1.25% | 1.29% | 249ms | 281ms | 310ms |
-| Speechmatics | Real-time v2 | 99.7% | 83.2% | 1.40% | 1.07% | 495ms | 676ms | 736ms |
+| Speechmatics | Enhanced | 99.7% | 83.2% | 1.40% | 1.07% | 495ms | 676ms | 736ms |
 
 ### Latency vs Accuracy Trade-off
 

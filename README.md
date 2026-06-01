@@ -8,18 +8,18 @@ Benchmark results on 1000 samples from the `pipecat-ai/smart-turn-data-v3.1-trai
 
 | Service | Model | Transcripts | Perfect | WER Mean | Pooled WER | TTFS Median | TTFS P95 | TTFS P99 |
 |---------|-------|-------------|---------|----------|------------|-------------|----------|----------|
-| AssemblyAI | Universal | 99.8% | 66.8% | 3.49% | 3.02% | 256ms | 362ms | 417ms |
-| AWS | Transcribe Streaming | 100.0% | 77.4% | 1.68% | 1.75% | 1136ms | 1527ms | 1897ms |
-| Azure | Speech to Text | 100.0% | 82.9% | 1.21% | 1.18% | 1016ms | 1345ms | 1791ms |
-| Cartesia | Ink Whisper | 100.0% | 84.2% | 1.47% | 1.25% | 299ms | 328ms | 1584ms |
-| Deepgram | Nova-3 General | 99.8% | 76.5% | 1.71% | 1.62% | 247ms | 298ms | 326ms |
-| ElevenLabs | Scribe v2 Realtime | 99.7% | 81.3% | 3.16% | 3.12% | 281ms | 348ms | 407ms |
-| Google | Chirp (latest_long) | 100.0% | 69.0% | 2.84% | 2.85% | 878ms | 1155ms | 1570ms |
-| Mistral | Voxtral Mini Realtime | 99.3% | 68.8% | 4.44% | 4.97% | 525ms | 973ms | 1913ms |
-| OpenAI | GPT-4o Mini Transcribe | 99.3% | 75.9% | 3.24% | 3.06% | 637ms | 965ms | 1655ms |
-| Smallest AI | Pulse | 100.0% | 72.4% | 2.30% | 2.37% | 398ms | 533ms | 1593ms |
-| Soniox | STT-RT v4 | 99.8% | 84.1% | 1.25% | 1.29% | 249ms | 281ms | 310ms |
-| Speechmatics | Enhanced | 99.7% | 83.2% | 1.40% | 1.07% | 495ms | 676ms | 736ms |
+| AssemblyAI | universal | 99.8% | 66.8% | 3.49% | 3.02% | 256ms | 362ms | 417ms |
+| AWS | default | 100.0% | 77.4% | 1.68% | 1.75% | 1136ms | 1527ms | 1897ms |
+| Azure | default | 100.0% | 82.9% | 1.21% | 1.18% | 1016ms | 1345ms | 1791ms |
+| Cartesia | ink-whisper | 100.0% | 84.2% | 1.47% | 1.25% | 299ms | 328ms | 1584ms |
+| Deepgram | nova-3-general | 99.8% | 76.5% | 1.71% | 1.62% | 247ms | 298ms | 326ms |
+| ElevenLabs | scribe_v2_realtime | 99.7% | 81.3% | 3.16% | 3.12% | 281ms | 348ms | 407ms |
+| Google | latest_long | 100.0% | 69.0% | 2.84% | 2.85% | 878ms | 1155ms | 1570ms |
+| Mistral | voxtral-mini-transcribe-realtime-2602 | 99.3% | 68.8% | 4.44% | 4.97% | 525ms | 973ms | 1913ms |
+| OpenAI | gpt-4o-mini-transcribe | 99.3% | 75.9% | 3.24% | 3.06% | 637ms | 965ms | 1655ms |
+| Smallest AI | pulse | 100.0% | 72.4% | 2.30% | 2.37% | 398ms | 533ms | 1593ms |
+| Soniox | stt-rt-v4 | 99.8% | 84.1% | 1.25% | 1.29% | 249ms | 281ms | 310ms |
+| Speechmatics | enhanced | 99.7% | 83.2% | 1.40% | 1.07% | 495ms | 676ms | 736ms |
 
 ### Latency vs Accuracy Trade-off
 

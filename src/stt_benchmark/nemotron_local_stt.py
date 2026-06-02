@@ -48,6 +48,7 @@ from pipecat.frames.frames import (
     VADUserStoppedSpeakingFrame,
 )
 from pipecat.processors.frame_processor import FrameDirection
+from pipecat.services.settings import STTSettings
 from pipecat.services.stt_service import WebsocketSTTService
 from pipecat.utils.time import time_now_iso8601
 from websockets.asyncio.client import connect as websocket_connect
@@ -55,7 +56,7 @@ from websockets.asyncio.client import connect as websocket_connect
 
 _TELEMETRY_LOCK = threading.Lock()
 _TELEMETRY_COUNTERS: dict[str, int] = {}
-_DEFAULT_FINALIZE_SILENCE_MS = 2500
+_DEFAULT_FINALIZE_SILENCE_MS = 5000
 _MAX_FINALIZE_SILENCE_MS = 10_000
 
 
@@ -102,9 +103,10 @@ def _env_int(name: str, default: int) -> int:
 class NemotronLocalSTTService(WebsocketSTTService):
     """Streaming STT against the local Nemotron WebSocket ASR server.
 
-    A hard reset (``finalize=True``) is issued when VAD detects the user
-    stopped speaking; the resulting final transcript is pushed as a finalized
-    ``TranscriptionFrame`` so the base class reports TTFS immediately.
+    By default, VAD stop only arms a single hard reset after a quiet window.
+    Benchmark VAD can fire multiple times inside one sample, so finalizing on
+    every VAD stop truncates utterances and inflates WER. Set
+    ``NEMOTRON_FINALIZE_MODE=immediate`` only to reproduce the old behavior.
     """
 
     def __init__(
@@ -125,17 +127,26 @@ class NemotronLocalSTTService(WebsocketSTTService):
             sample_rate: Audio sample rate; the server requires 16000.
             **kwargs: Additional arguments passed to WebsocketSTTService.
         """
-        super().__init__(sample_rate=sample_rate, **kwargs)
+        super().__init__(
+            sample_rate=sample_rate,
+            settings=STTSettings(
+                model=model_name,
+                language=target_language,
+            ),
+            **kwargs,
+        )
         self._url = url
         self._target_language = target_language.strip() if target_language else None
         self._model_name = model_name.strip() if model_name else None
         self._receive_task = None
         self._ready = False
+        self._ready_event = asyncio.Event()
         self._audio_send_lock = asyncio.Lock()
         self._finalize_mode = (
-            os.environ.get("NEMOTRON_FINALIZE_MODE", "").strip().lower()
+            os.environ.get("NEMOTRON_FINALIZE_MODE", "single").strip().lower()
+            or "single"
         )
-        self._single_finalize_mode = self._finalize_mode == "single"
+        self._single_finalize_mode = self._finalize_mode != "immediate"
         self._continuous_context = os.environ.get("NEMOTRON_CONTINUOUS", "") == "1"
         self._eou_client_accept = os.environ.get("NEMOTRON_EOU_CLIENT", "") == "1"
         self._finalize_silence_ms = _DEFAULT_FINALIZE_SILENCE_MS
@@ -261,6 +272,7 @@ class NemotronLocalSTTService(WebsocketSTTService):
                 raise RuntimeError(f"Expected ready from Nemotron server, got {data!r}")
             logger.debug(f"{self} server ready")
             self._ready = True
+            self._ready_event.set()
             await self._call_event_handler("on_connected")
         except Exception as e:
             logger.error(f"{self} connection failed: {e}")
@@ -268,10 +280,13 @@ class NemotronLocalSTTService(WebsocketSTTService):
                 with contextlib.suppress(Exception):
                     await self._websocket.close()
             self._websocket = None
+            self._ready = False
+            self._ready_event.clear()
             raise
 
     async def _disconnect_websocket(self):
         self._ready = False
+        self._ready_event.clear()
         if self._websocket:
             try:
                 await self._websocket.close()
@@ -281,21 +296,31 @@ class NemotronLocalSTTService(WebsocketSTTService):
                 self._websocket = None
         await self._call_event_handler("on_disconnected")
 
+    async def _wait_until_ready(self, timeout: float = 30.0) -> bool:
+        if self._websocket and self._ready:
+            return True
+        with contextlib.suppress(asyncio.TimeoutError):
+            await asyncio.wait_for(self._ready_event.wait(), timeout=timeout)
+        return bool(self._websocket and self._ready)
+
     async def run_stt(self, audio: bytes):
         """Send audio to the server; results arrive via the receive task."""
-        if self._websocket and self._ready:
-            try:
-                async with self._audio_send_lock:
-                    if self._websocket and self._ready:
-                        await self._websocket.send(audio)
-            except Exception as e:
-                logger.error(f"{self} failed to send audio: {e}")
-                await self._report_error(ErrorFrame(f"Failed to send audio: {e}"))
+        if not await self._wait_until_ready():
+            await self._report_error(ErrorFrame("Nemotron server was not ready for audio"))
+            yield None
+            return
+        try:
+            async with self._audio_send_lock:
+                if self._websocket and self._ready:
+                    await self._websocket.send(audio)
+        except Exception as e:
+            logger.error(f"{self} failed to send audio: {e}")
+            await self._report_error(ErrorFrame(f"Failed to send audio: {e}"))
         yield None
 
     async def _send_reset(self, finalize: bool = True, before_send=None) -> bool:
         """Ask the server to finalize the current utterance (hard reset)."""
-        if not (self._websocket and self._ready):
+        if not await self._wait_until_ready():
             return False
         try:
             async with self._audio_send_lock:
@@ -317,7 +342,7 @@ class NemotronLocalSTTService(WebsocketSTTService):
 
     async def _send_vad_signal(self, signal_type: str) -> bool:
         """Send a declarative VAD state signal to the server."""
-        if not (self._websocket and self._ready):
+        if not await self._wait_until_ready():
             return False
         try:
             async with self._audio_send_lock:

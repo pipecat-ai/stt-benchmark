@@ -58,6 +58,13 @@ def run_benchmark(
         "-v",
         help="VAD silence duration to trigger stop (seconds)",
     ),
+    concurrency: int = typer.Option(
+        1,
+        "--concurrency",
+        "-c",
+        min=1,
+        help="Number of samples to benchmark concurrently",
+    ),
     test: bool = typer.Option(
         False,
         "--test",
@@ -89,6 +96,7 @@ def run_benchmark(
         console.print(f"Sample limit: {limit}")
     console.print(f"Skip existing: {skip_existing}")
     console.print(f"VAD stop secs: {vad_stop_secs}")
+    console.print(f"Concurrency: {concurrency}")
     if test:
         console.print("[yellow]Test mode: using separate test database[/yellow]")
 
@@ -168,13 +176,14 @@ def run_benchmark(
                         total=len(pending),
                     )
 
-                    def callback(current, total, sample_id):
-                        progress.update(task, completed=current)
+                    def callback(current, total, sample_id, task_id=task):
+                        progress.update(task_id, completed=current)
 
                     results = await runner.benchmark_batch(
                         pending,
                         service_name,
                         model=model,
+                        concurrency=concurrency,
                         progress_callback=callback,
                     )
 

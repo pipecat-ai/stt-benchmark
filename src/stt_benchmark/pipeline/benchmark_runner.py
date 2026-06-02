@@ -258,30 +258,63 @@ class BenchmarkRunner:
         samples: list[AudioSample],
         service_name: ServiceName,
         model: str | None = None,
+        concurrency: int = 1,
         progress_callback: Callable | None = None,
     ) -> list[BenchmarkResult]:
-        """Benchmark multiple audio samples sequentially.
+        """Benchmark multiple audio samples.
 
         Args:
             samples: List of audio samples to benchmark.
             service_name: The STT service to use.
             model: Optional model name override.
+            concurrency: Maximum number of samples to benchmark concurrently.
             progress_callback: Optional callback(current, total, sample_id).
 
         Returns:
             List of BenchmarkResult objects.
         """
-        results = []
+        if concurrency <= 1:
+            results = []
 
-        for i, sample in enumerate(samples):
-            if progress_callback:
-                progress_callback(i, len(samples), sample.sample_id)
+            for i, sample in enumerate(samples):
+                if progress_callback:
+                    progress_callback(i, len(samples), sample.sample_id)
 
-            result = await self.benchmark_sample(sample, service_name, model)
-            results.append(result)
+                result = await self.benchmark_sample(sample, service_name, model)
+                results.append(result)
 
-            # Brief delay between samples to avoid rate limiting
-            await asyncio.sleep(0.1)
+                # Brief delay between samples to avoid rate limiting
+                await asyncio.sleep(0.1)
+        else:
+            results: list[BenchmarkResult | None] = [None] * len(samples)
+            queue: asyncio.Queue[tuple[int, AudioSample]] = asyncio.Queue()
+            for item in enumerate(samples):
+                queue.put_nowait(item)
+            completed = 0
+            progress_lock = asyncio.Lock()
+
+            async def worker() -> None:
+                nonlocal completed
+                while True:
+                    try:
+                        index, sample = queue.get_nowait()
+                    except asyncio.QueueEmpty:
+                        return
+                    try:
+                        results[index] = await self.benchmark_sample(
+                            sample, service_name, model
+                        )
+                    finally:
+                        async with progress_lock:
+                            completed += 1
+                            if progress_callback:
+                                progress_callback(completed, len(samples), sample.sample_id)
+                        queue.task_done()
+
+            await asyncio.gather(
+                *(worker() for _ in range(min(concurrency, len(samples))))
+            )
+            results = [result for result in results if result is not None]
 
         if progress_callback:
             progress_callback(len(samples), len(samples), "complete")

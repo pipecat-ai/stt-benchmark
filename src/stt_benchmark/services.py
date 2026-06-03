@@ -227,6 +227,7 @@ def create_gradium() -> FrameProcessor:
         api_key=_get_env("GRADIUM_API_KEY"),
         settings=GradiumSTTService.Settings(
             language=Language.EN,
+            delay_in_frames=12,
         ),
     )
 

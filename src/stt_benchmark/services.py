@@ -84,8 +84,11 @@ def create_assemblyai() -> FrameProcessor:
     return AssemblyAISTTService(
         api_key=_get_env("ASSEMBLYAI_API_KEY"),
         settings=AssemblyAISTTService.Settings(
+            model="u3-rt-pro",
             end_of_turn_confidence_threshold=1.0,
-            max_turn_silence=2000,
+            min_turn_silence=50,
+            max_turn_silence=50,
+            vad_threshold=0.2,
         ),
         vad_force_turn_endpoint=True,
     )

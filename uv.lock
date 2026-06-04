@@ -2701,7 +2701,7 @@ wheels = [
 
 [[package]]
 name = "pipecat-ai"
-version = "1.2.1"
+version = "1.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiofiles" },
@@ -2721,12 +2721,11 @@ dependencies = [
     { name = "pyloudnorm" },
     { name = "resampy" },
     { name = "soxr" },
-    { name = "transformers" },
     { name = "wait-for2", marker = "python_full_version < '3.12'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/f8/22/19d75d5189b9399a873ab3c55ce2506b7a2d06b7e832b73a04e7d289899b/pipecat_ai-1.2.1.tar.gz", hash = "sha256:5f687e7239f7e20cc240a279f55e3b0ced5c8828b76285ab4ee39db354c8aaa9", size = 11120637, upload-time = "2026-05-15T22:21:10.033Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/92/cc/8352e30c47ee4fd075b9a0f3d91183294582578f07289180a30fc8228409/pipecat_ai-1.3.0.tar.gz", hash = "sha256:abeb9d95b1df2f35b855334cda1899fc603124d5448967c82ba08a94c604318f", size = 11260868, upload-time = "2026-05-29T01:03:00.532Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/4f/cf/2900d4e2aaa2afb8cd7d63405295fc6bfd90779b2e9734066dbe36de2fd7/pipecat_ai-1.2.1-py3-none-any.whl", hash = "sha256:ae31f48d8bf040763b93cfe001d9d77a53e542c8f32d22cd66494171eb4a794f", size = 10770689, upload-time = "2026-05-15T22:21:07.431Z" },
+    { url = "https://files.pythonhosted.org/packages/b6/73/fff17b48cd254ad1c358d612ce92fcc342838e0fc43cc235aca3c70527fb/pipecat_ai-1.3.0-py3-none-any.whl", hash = "sha256:59d4950a61a0a201cf551354d8cdec038c1bdf457df080cd41d29d7ff53e0b2e", size = 10905336, upload-time = "2026-05-29T01:02:57.764Z" },
 ]
 
 [package.optional-dependencies]
@@ -3929,7 +3928,7 @@ requires-dist = [
     { name = "matplotlib", marker = "extra == 'viz'", specifier = ">=3.8.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8.0" },
     { name = "numpy", specifier = ">=1.26.0" },
-    { name = "pipecat-ai", extras = ["assemblyai", "aws", "azure", "cartesia", "deepgram", "elevenlabs", "fal", "gladia", "google", "gradium", "groq", "mistral", "nvidia", "openai", "sagemaker", "sarvam", "smallest", "soniox", "speechmatics", "whisper", "silero", "soundfile", "xai"], specifier = ">=1.2.1,<2" },
+    { name = "pipecat-ai", extras = ["assemblyai", "aws", "azure", "cartesia", "deepgram", "elevenlabs", "fal", "gladia", "google", "gradium", "groq", "mistral", "nvidia", "openai", "sagemaker", "sarvam", "smallest", "soniox", "speechmatics", "whisper", "silero", "soundfile", "xai"], specifier = ">=1.3.0,<2" },
     { name = "pydantic", specifier = ">=2.0.0" },
     { name = "pydantic-settings", specifier = ">=2.0.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },

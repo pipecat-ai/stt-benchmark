@@ -9,9 +9,9 @@ from loguru import logger
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.audio.vad.vad_analyzer import VADParams
 from pipecat.pipeline.pipeline import Pipeline
-from pipecat.pipeline.runner import PipelineRunner
-from pipecat.pipeline.task import PipelineParams, PipelineTask
+from pipecat.pipeline.worker import PipelineParams, PipelineWorker
 from pipecat.processors.audio.vad_processor import VADProcessor
+from pipecat.workers.runner import WorkerRunner
 
 if TYPE_CHECKING:
     import aiohttp
@@ -177,8 +177,8 @@ class BenchmarkRunner:
         # Build pipeline
         pipeline = Pipeline([transport, vad_processor, stt_service])
 
-        # Create task with observers
-        task = PipelineTask(
+        # Create worker with observers
+        worker = PipelineWorker(
             pipeline,
             params=PipelineParams(
                 audio_in_sample_rate=self.sample_rate,
@@ -189,9 +189,10 @@ class BenchmarkRunner:
         )
 
         # Run pipeline
-        runner = PipelineRunner(handle_sigint=False)
-        pipeline_coro = runner.run(task)
-        pipeline_task = asyncio.create_task(pipeline_coro)
+        runner = WorkerRunner(handle_sigint=False)
+        await runner.add_workers(worker)
+        pipeline_coro = runner.run()
+        pipeline_worker = asyncio.create_task(pipeline_coro)
 
         try:
             # Wait for audio to complete
@@ -228,10 +229,10 @@ class BenchmarkRunner:
                 await metrics_observer.wait_for_ttfb(timeout=2.5)
 
         finally:
-            # Cancel the pipeline task
-            await task.cancel()
+            # Cancel the pipeline worker
+            await worker.cancel()
             try:
-                await pipeline_task
+                await pipeline_worker
             except asyncio.CancelledError:
                 pass
 

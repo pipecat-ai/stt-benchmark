@@ -84,7 +84,7 @@ uv run stt-benchmark report
 
 ## Installation
 
-Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
+Requires Python 3.11+ and [uv](https://docs.astral.sh/uv/).
 
 ```bash
 git clone <repo-url>
@@ -230,7 +230,7 @@ stt_benchmark_data/
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│                        PipelineTask                      │
+│                      PipelineWorker                      │
 │  observers=[MetricsCollector, TranscriptionCollector]    │
 ├──────────────────────────────────────────────────────────┤
 │                                                          │

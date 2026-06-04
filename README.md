@@ -6,21 +6,24 @@ A framework for benchmarking Speech-to-Text services with TTFS (Time To Final Se
 
 Benchmark results on 1000 samples from the `pipecat-ai/smart-turn-data-v3.1-train` dataset.
 
-| Service | Transcripts | Perfect | WER Mean | Pooled WER | TTFS Median | TTFS P95 | TTFS P99 |
-|---------|-------------|---------|----------|------------|-------------|----------|----------|
-| AssemblyAI | 99.8% | 66.8% | 3.49% | 3.02% | 256ms | 362ms | 417ms |
-| AWS | 100.0% | 77.4% | 1.68% | 1.75% | 1136ms | 1527ms | 1897ms |
-| Azure | 100.0% | 82.9% | 1.21% | 1.18% | 1016ms | 1345ms | 1791ms |
-| Cartesia | 100.0% | 84.2% | 1.47% | 1.25% | 299ms | 328ms | 1584ms |
-| Deepgram | 99.8% | 76.5% | 1.71% | 1.62% | 247ms | 298ms | 326ms |
-| Elevenlabs | 99.7% | 81.3% | 3.16% | 3.12% | 281ms | 348ms | 407ms |
-| Google | 100.0% | 69.0% | 2.84% | 2.85% | 878ms | 1155ms | 1570ms |
-| Gradium | 99.7% | 65.3% | 3.72% | 3.96% | 570ms | 595ms | 614ms |
-| Mistral | 99.3% | 68.8% | 4.44% | 4.97% | 525ms | 973ms | 1913ms |
-| OpenAI | 99.3% | 75.9% | 3.24% | 3.06% | 637ms | 965ms | 1655ms |
-| Smallest AI | 100.0% | 72.4% | 2.30% | 2.37% | 398ms | 533ms | 1593ms |
-| Soniox | 99.8% | 84.1% | 1.25% | 1.29% | 249ms | 281ms | 310ms |
-| Speechmatics | 99.7% | 83.2% | 1.40% | 1.07% | 495ms | 676ms | 736ms |
+<!-- RESULTS_TABLE:START -->
+| Vendor | Model | Transcripts | Perfect | WER Mean | Pooled WER | TTFS Median | TTFS P95 | TTFS P99 |
+|--------|-------|-------------|---------|----------|------------|-------------|----------|----------|
+| AssemblyAI | universal-streaming-english | 99.8% | 66.8% | 3.49% | 3.02% | 256ms | 362ms | 417ms |
+| AWS | N/A | 100.0% | 77.4% | 1.68% | 1.75% | 1136ms | 1527ms | 1897ms |
+| Azure | N/A | 100.0% | 82.9% | 1.21% | 1.18% | 1016ms | 1345ms | 1791ms |
+| Cartesia | ink-2 | 100.0% | 84.2% | 1.47% | 1.25% | 299ms | 328ms | 1584ms |
+| Cartesia | ink-whisper | 99.9% | 60.5% | 3.92% | 4.36% | 266ms | 364ms | 898ms |
+| Deepgram | nova-3-general | 99.8% | 76.5% | 1.71% | 1.62% | 247ms | 298ms | 326ms |
+| ElevenLabs | scribe_v2_realtime | 99.7% | 81.3% | 3.16% | 3.12% | 281ms | 348ms | 407ms |
+| Google | latest-long | 100.0% | 69.0% | 2.84% | 2.85% | 878ms | 1155ms | 1570ms |
+| Gradium | default | 99.7% | 65.3% | 3.72% | 3.96% | 570ms | 595ms | 614ms |
+| Mistral | voxtral-mini-transcribe-realtime-2602 | 99.3% | 68.8% | 4.44% | 4.97% | 525ms | 973ms | 1913ms |
+| OpenAI | gpt-4o-transcribe | 99.3% | 75.9% | 3.24% | 3.06% | 637ms | 965ms | 1655ms |
+| Smallest AI | pulse | 100.0% | 72.4% | 2.30% | 2.37% | 398ms | 533ms | 1593ms |
+| Soniox | stt-rt-v4 | 99.8% | 84.1% | 1.25% | 1.29% | 249ms | 281ms | 310ms |
+| Speechmatics | N/A | 99.7% | 83.2% | 1.40% | 1.07% | 495ms | 676ms | 736ms |
+<!-- RESULTS_TABLE:END -->
 
 ### Latency vs Accuracy Trade-off
 
@@ -147,9 +150,9 @@ This gives accuracy metrics that reflect real-world impact on downstream LLM app
 
 ## Supported Services
 
-`assemblyai`, `aws`, `azure`, `cartesia`, `deepgram`, `deepgram_flux`, `elevenlabs`, `fal`, `gladia`, `google`, `gradium`, `groq`, `nvidia`, `nvidia_sagemaker`, `openai`, `sarvam`, `smallest`, `soniox`, `speechmatics`, `whisper`
+`assemblyai`, `assemblyai_u3_rt_pro`, `aws`, `azure`, `cartesia`, `cartesia_ink2`, `deepgram`, `elevenlabs`, `elevenlabs_http`, `fal`, `gladia`, `google`, `gradium`, `groq`, `mistral`, `nvidia`, `nvidia_sagemaker`, `openai`, `openai_realtime`, `sarvam`, `smallest`, `soniox`, `speechmatics`, `whisper`, `xai`
 
-See `env.example` for required API keys.
+Each key is one (vendor, model) pair — a vendor with multiple models has multiple keys (e.g. `cartesia` / `cartesia_ink2`, `assemblyai` / `assemblyai_u3_rt_pro`). To add a model, see [docs/adding-models.md](docs/adding-models.md). See `env.example` for required API keys.
 
 ## CLI Commands
 
@@ -258,6 +261,7 @@ Audio samples are sourced from the `pipecat-ai/smart-turn-data-v3.1-train` datas
 
 - [CLI Reference](docs/cli.md) - Complete command documentation
 - [Running Analysis](docs/analysis.md) - Step-by-step analysis guide
+- [Adding Models](docs/adding-models.md) - How to add a new vendor or a new model for an existing vendor
 
 ## License
 

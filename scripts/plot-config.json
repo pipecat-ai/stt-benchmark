@@ -1,8 +1,10 @@
 {
   "services": [
     "assemblyai",
+    "assemblyai_u3_rt_pro",
     "aws",
     "azure",
+    "cartesia",
     "cartesia_ink2",
     "deepgram",
     "elevenlabs",
@@ -14,21 +16,6 @@
     "soniox",
     "speechmatics"
   ],
-  "display_names": {
-    "assemblyai": "AssemblyAI",
-    "aws": "AWS",
-    "azure": "Azure",
-    "cartesia_ink2": "Cartesia",
-    "deepgram": "Deepgram",
-    "elevenlabs": "ElevenLabs",
-    "google": "Google",
-    "gradium": "Gradium",
-    "mistral": "Mistral",
-    "openai_realtime": "OpenAI",
-    "smallest": "Smallest AI",
-    "soniox": "Soniox",
-    "speechmatics": "Speechmatics"
-  },
   "latency": ["median", "p95"],
   "output": "assets/"
 }

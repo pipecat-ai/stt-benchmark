@@ -33,11 +33,19 @@ def get_data_from_db():
             wer_summary = await db.get_service_summary(service_name, model_name)
 
             if transcript_stats and wer_summary:
+                sample_count = wer_summary["sample_count"]
+                perfect_pct = (
+                    wer_summary["perfect_count"] / sample_count * 100 if sample_count else 0.0
+                )
                 data[service_name.value] = {
                     "ttfb_median": transcript_stats["ttfb_median"] * 1000,  # Convert to ms
                     "ttfb_p95": transcript_stats["ttfb_p95"] * 1000,
                     "ttfb_p99": transcript_stats["ttfb_p99"] * 1000,
                     "pooled_wer": wer_summary["pooled_wer"] * 100,  # Convert to %
+                    # Extra fields used by the README table (not the plot):
+                    "success_rate": transcript_stats["success_rate"] * 100,
+                    "perfect_pct": perfect_pct,
+                    "wer_mean": wer_summary["wer_mean"] * 100,
                 }
 
         await db.close()
@@ -238,7 +246,9 @@ def load_config_file(config_path: str) -> dict:
 
     Supported keys:
         services: list of service names to include (e.g. ["deepgram", "assemblyai"])
-        display_names: dict mapping service keys to display labels (e.g. {"deepgram": "Deepgram"})
+        display_names: optional dict of per-service label overrides. Labels are
+            derived from the registry (vendor / model_label) by default; only add
+            entries here to override a derived label.
         latency: latency metric - "median", "p95", "p99", or "all"
         output: output file path or directory
         show: whether to display the plot interactively (true/false)
@@ -292,6 +302,66 @@ def filter_services(data: dict, service_names: list[str]) -> dict:
         print(f"Available services: {', '.join(sorted(data.keys()))}")
 
     return filtered
+
+
+def generate_markdown_table(data: dict) -> str:
+    """Build the README "Results Summary" table from registry + DB metrics.
+
+    ``data`` is keyed by service key (i.e. before display-name remapping). The
+    Vendor and Model columns come from the registry (``vendor`` / ``model_label``)
+    so they never drift from the services config; metrics come from the database.
+    Rows are grouped by vendor, current model first. Only services with complete
+    metrics appear (a configured-but-not-yet-benchmarked model is skipped).
+    """
+    from stt_benchmark.services import STT_SERVICES
+
+    rows = []
+    for key, metrics in data.items():
+        definition = STT_SERVICES.get(key)
+        if definition is None:
+            continue
+        rows.append((definition, metrics))
+
+    # Group by vendor, current model first, then by model label.
+    rows.sort(key=lambda r: (r[0].vendor.lower(), not r[0].is_current, r[0].model_label.lower()))
+
+    lines = [
+        "| Vendor | Model | Transcripts | Perfect | WER Mean | Pooled WER "
+        "| TTFS Median | TTFS P95 | TTFS P99 |",
+        "|--------|-------|-------------|---------|----------|------------"
+        "|-------------|----------|----------|",
+    ]
+    for definition, m in rows:
+        lines.append(
+            f"| {definition.vendor} | {definition.model_label} "
+            f"| {m['success_rate']:.1f}% | {m['perfect_pct']:.1f}% "
+            f"| {m['wer_mean']:.2f}% | {m['pooled_wer']:.2f}% "
+            f"| {m['ttfb_median']:.0f}ms | {m['ttfb_p95']:.0f}ms | {m['ttfb_p99']:.0f}ms |"
+        )
+    return "\n".join(lines)
+
+
+README_TABLE_START = "<!-- RESULTS_TABLE:START -->"
+README_TABLE_END = "<!-- RESULTS_TABLE:END -->"
+
+
+def update_readme_table(table_md: str, readme_path: Path) -> bool:
+    """Replace the results table in README.md between the marker comments.
+
+    Returns True if the README was updated, False if the markers were not found
+    (in which case the caller should fall back to writing a standalone file).
+    """
+    if not readme_path.exists():
+        return False
+    content = readme_path.read_text()
+    if README_TABLE_START not in content or README_TABLE_END not in content:
+        return False
+
+    before, _, rest = content.partition(README_TABLE_START)
+    _, _, after = rest.partition(README_TABLE_END)
+    new_content = f"{before}{README_TABLE_START}\n{table_md}\n{README_TABLE_END}{after}"
+    readme_path.write_text(new_content)
+    return True
 
 
 def main():
@@ -360,9 +430,33 @@ def main():
             print("No matching services found. Nothing to plot.")
             sys.exit(1)
 
-    # Apply display name mapping
-    if display_names:
-        data = apply_display_names(data, display_names)
+    # Generate the README results table from the same (plot-config) services,
+    # using registry labels + DB metrics. Do this before display-name remapping
+    # so we still have service keys to look up vendor/model_label.
+    table_md = generate_markdown_table(data)
+    readme_path = Path(__file__).parent.parent / "README.md"
+    if update_readme_table(table_md, readme_path):
+        print(f"\nUpdated results table in: {readme_path}\n")
+    else:
+        out = Path(output)
+        table_dir = out if (out.is_dir() or output.endswith("/")) else out.parent
+        table_dir.mkdir(parents=True, exist_ok=True)
+        table_file = table_dir / "results-table.md"
+        table_file.write_text(table_md + "\n")
+        print(
+            f"\nREADME markers not found; wrote table to: {table_file}\n"
+            f"(add {README_TABLE_START} / {README_TABLE_END} around the table in "
+            f"README.md to auto-update it)\n"
+        )
+    print(table_md)
+    print()
+
+    # Derive labels from registry metadata (vendor / model_label). Any
+    # display_names in the config are optional per-service overrides.
+    from stt_benchmark.services import get_display_names
+
+    labels = {**get_display_names(list(data.keys())), **display_names}
+    data = apply_display_names(data, labels)
 
     print(f"Found {len(data)} services with complete metrics")
     for name, metrics in sorted(data.items()):

@@ -59,6 +59,11 @@ def calculate_wer(
         "-t",
         help="Use test database (test_results.db) instead of main database",
     ),
+    passes: int = typer.Option(
+        1,
+        "--passes",
+        help="Score each sample this many times and keep the median (suppresses scorer non-determinism). Use an odd value.",
+    ),
 ):
     """Calculate semantic WER metrics for transcription results.
 
@@ -131,7 +136,7 @@ def calculate_wer(
 
         console.print(f"Ground truth coverage: {gt_count}/{sample_count} samples\n")
 
-        evaluator = SemanticWEREvaluator(db_path=db_path)
+        evaluator = SemanticWEREvaluator(db_path=db_path, num_passes=passes)
 
         console.print("Warming prompt cache...", end=" ")
         try:

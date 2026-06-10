@@ -23,6 +23,7 @@ Benchmark results on 1000 samples from the `pipecat-ai/smart-turn-data-v3.1-trai
 | NVIDIA | Nemotron 3.0 ASR (en) | 100.0% | 76.1% | 1.90% | 1.95% | 221ms | 238ms | 252ms |
 | NVIDIA | Nemotron 3.5 ASR (multilingual) | 99.6% | 62.0% | 4.54% | 4.58% | 236ms | 253ms | 266ms |
 | OpenAI | gpt-4o-transcribe | 99.3% | 75.9% | 3.24% | 3.06% | 637ms | 965ms | 1655ms |
+| Reson8 | Resonant-1 Turns | 99.9% | 85.6% | 1.39% | 1.10% | 326ms | 639ms | 1156ms |
 | Smallest AI | pulse | 100.0% | 72.4% | 2.30% | 2.37% | 398ms | 533ms | 1593ms |
 | Soniox | stt-rt-v4 | 99.8% | 84.1% | 1.25% | 1.29% | 249ms | 281ms | 310ms |
 | Speechmatics | N/A | 99.7% | 83.2% | 1.40% | 1.07% | 495ms | 676ms | 736ms |

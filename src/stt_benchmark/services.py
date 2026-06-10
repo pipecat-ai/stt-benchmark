@@ -357,6 +357,36 @@ def create_openai_realtime() -> FrameProcessor:
     )
 
 
+def create_reson8() -> FrameProcessor:
+    # Reson8 is not bundled with Pipecat; the service lives in this repo.
+    from stt_benchmark.services_custom.reson8_stt import DEFAULT_URL, Reson8STTService
+
+    # When targeting a local piano build (RESON8_URL set to ws://localhost:...),
+    # there is no gateway to validate the API key and inject the Tuba auth
+    # headers, so pass them directly. Any UUIDs work — billing/vocab degrade
+    # gracefully on the dev server.
+    url = os.getenv("RESON8_URL", DEFAULT_URL)
+    extra_headers: dict[str, str] = {}
+    customer_id = os.getenv("RESON8_CUSTOMER_ID")
+    if customer_id:
+        extra_headers = {
+            "X-Customer-Id": customer_id,
+            "X-Organization-Id": os.getenv("RESON8_ORGANIZATION_ID", customer_id),
+            "X-Client-Id": os.getenv("RESON8_CLIENT_ID", customer_id),
+        }
+
+    return Reson8STTService(
+        api_key=_get_env("RESON8_API_KEY"),
+        url=url,
+        extra_headers=extra_headers,
+        min_patience_seconds=0.2,
+        max_patience_seconds=0.2,
+        settings=Reson8STTService.Settings(
+            language=Language.EN,
+        ),
+    )
+
+
 def create_sarvam() -> FrameProcessor:
     from pipecat.services.sarvam.stt import SarvamSTTService
 
@@ -564,6 +594,12 @@ STT_SERVICES: dict[str, ServiceDefinition] = {
         vendor="OpenAI",
         model_label="gpt-4o-transcribe",
         required_env_vars=["OPENAI_API_KEY"],
+    ),
+    "reson8": ServiceDefinition(
+        factory=create_reson8,
+        vendor="Reson8",
+        model_label="Resonant-1 Turns",
+        required_env_vars=["RESON8_API_KEY"],
     ),
     "sarvam": ServiceDefinition(
         factory=create_sarvam,

@@ -364,11 +364,17 @@ class SemanticWEREvaluator:
         model: str = "claude-sonnet-4-5-20250929",
         db_path: Path | None = None,
         max_concurrency: int = 50,
+        num_passes: int = 1,
     ):
         self.config = get_config()
         self.model = model
         self.db = Database(db_path=db_path)
         self._api_semaphore = asyncio.Semaphore(max_concurrency)
+        # The scorer is non-deterministic even at temperature 0 (Claude self-reports the
+        # counts, and its normalization occasionally drops/duplicates a word). With
+        # num_passes > 1 each sample is scored that many times and the median-by-total-errors
+        # pass is kept, suppressing those outlier passes. Use an odd value for a clean median.
+        self.num_passes = max(1, num_passes)
 
         if not self.config.anthropic_api_key:
             raise ValueError("ANTHROPIC_API_KEY not set in environment")
@@ -800,6 +806,34 @@ Show your work clearly, then call calculate_wer with your verified counts."""
 
         return None
 
+    async def evaluate_median(
+        self,
+        reference: str,
+        hypothesis: str,
+        filename: str = "",
+    ) -> tuple[dict, SemanticWERTrace] | None:
+        """Score ``self.num_passes`` times and return the median-by-total-errors pass.
+
+        Passes run sequentially so each still holds a single API-semaphore slot (the
+        caller acquires it once per sample). The returned (result, trace) is a real,
+        self-consistent pass — the one whose total error count is the median — rather
+        than a synthetic blend of per-component medians.
+        """
+        if self.num_passes <= 1:
+            return await self.evaluate_with_retry(reference, hypothesis, filename=filename)
+
+        evals: list[tuple[dict, SemanticWERTrace]] = []
+        for _ in range(self.num_passes):
+            pair = await self.evaluate_with_retry(reference, hypothesis, filename=filename)
+            if pair is not None:
+                evals.append(pair)
+
+        if not evals:
+            return None
+
+        evals.sort(key=lambda er: er[0]["substitutions"] + er[0]["deletions"] + er[0]["insertions"])
+        return evals[(len(evals) - 1) // 2]
+
     async def evaluate_service(
         self,
         service_name: ServiceName,
@@ -847,8 +881,8 @@ Show your work clearly, then call calculate_wer with your verified counts."""
                     logger.warning(f"No ground truth for sample {sample.sample_id}")
                     return
 
-                # Evaluate with Claude (with retry and timeout)
-                eval_pair = await self.evaluate_with_retry(
+                # Evaluate with Claude (median of num_passes, each with retry and timeout)
+                eval_pair = await self.evaluate_median(
                     gt.text, result.transcription, filename=sample.sample_id
                 )
 

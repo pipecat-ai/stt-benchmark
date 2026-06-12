@@ -105,4 +105,4 @@ override-dependencies = [
 ]
 
 [tool.uv.sources]
-platform-proto = { path = "../platform-proto", editable = true }
+platform-proto = { git = "ssh://git@github.com/ToolsAiforia/platform-proto", rev = "v0.8.0" }

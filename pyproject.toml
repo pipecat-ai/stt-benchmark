@@ -46,6 +46,7 @@ dependencies = [
     "readchar>=4.0.0",
     "adjusttext>=1.3.0",
     "platform-proto",
+    "betterproto==2.0.0b6",
 ]
 
 [project.optional-dependencies]
@@ -104,4 +105,4 @@ override-dependencies = [
 ]
 
 [tool.uv.sources]
-platform-proto = { path = "../platform-proto", editable = true }
+platform-proto = { git = "ssh://git@github.com/ToolsAiforia/platform-proto", rev = "v0.8.0" }

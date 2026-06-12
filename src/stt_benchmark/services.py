@@ -210,6 +210,21 @@ def create_speech_proxy(
     )
 
 
+def create_deepgram_flux() -> FrameProcessor:
+    """Deepgram Flux via the production speech-proxy (recognizer asr_deepgram_flux_en).
+
+    Flux self-endpoints with a single complete is_final per turn (same client
+    contract as nova3), so the standard proxy client handles it unchanged; only
+    the recognizer differs. Reliable 99/100 with full transcripts, vs the unstable
+    vad_v2 (~50% no-final/timeout). See the task README for the evaluation.
+    """
+    from stt_benchmark.services_aiphoria.deepgram_flux import (
+        DeepgramFluxSTTService,
+    )
+
+    return DeepgramFluxSTTService()
+
+
 def create_elevenlabs() -> FrameProcessor:
     from pipecat.services.elevenlabs.stt import ElevenLabsRealtimeSTTService
 
@@ -478,6 +493,10 @@ STT_SERVICES: dict[str, ServiceDefinition] = {
     "speech_proxy": ServiceDefinition(
         factory=create_speech_proxy,
         required_env_vars=[],  # Deepgram key is server-side on the proxy
+    ),
+    "deepgram_flux": ServiceDefinition(
+        factory=create_deepgram_flux,
+        required_env_vars=[],  # TLS only; Deepgram key is server-side on the proxy
     ),
     "elevenlabs": ServiceDefinition(
         factory=create_elevenlabs,

@@ -19,7 +19,6 @@ class ServiceName(str, Enum):
     AZURE = "azure"
     CARTESIA = "cartesia"
     DEEPGRAM = "deepgram"
-    # DEEPGRAM_FLUX = "deepgram_flux"
     ELEVENLABS = "elevenlabs"
     ELEVENLABS_HTTP = "elevenlabs_http"
     FAL = "fal"
@@ -87,6 +86,21 @@ class AggregateStatistics(BaseModel):
     model_name: str | None = None
     num_samples: int
     num_errors: int = Field(description="Number of samples with errors")
+    num_premature_eos: int = Field(
+        default=0,
+        description="Non-error utterances with no measurable TTFB (dropped from the "
+        "latency percentiles): early-final-before-EOS plus no-final-captured",
+    )
+    num_no_final: int = Field(
+        default=0,
+        description="Subset of num_premature_eos with an empty/absent final transcript "
+        "(no usable post-anchor final was captured) vs a real truncated early final",
+    )
+    fpr: float | None = Field(
+        default=None,
+        description="False-positive rate: early finals BEFORE end-of-speech with "
+        "content (num_premature_eos - num_no_final) / non-error utterances",
+    )
 
     # TTFB statistics (in seconds)
     ttfb_mean: float | None = None

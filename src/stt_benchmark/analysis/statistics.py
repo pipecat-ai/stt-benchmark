@@ -41,12 +41,29 @@ def compute_statistics(
     successful = [r for r in filtered if r.ttfb_seconds is not None and r.error is None]
     errors = [r for r in filtered if r.error is not None]
 
+    # Non-error utterances with no measurable TTFB -> dropped from the latency
+    # percentiles. Two distinct sub-modes:
+    #   * early final BEFORE end-of-speech WITH content (truncated transcript)
+    #     -> a real false-positive endpoint. This is the FPR numerator.
+    #   * no usable post-anchor final captured (empty transcript) -> a no-final
+    #     defect (often a recognizer/harness reply-contract mismatch), tracked
+    #     separately so it is not read as premature endpointing.
+    # FPR is over non-error utterances (valid + dropped).
+    no_ttfb = [r for r in filtered if r.error is None and r.ttfb_seconds is None]
+    no_final = [r for r in no_ttfb if not (r.transcription or "").strip()]
+    early_final = [r for r in no_ttfb if (r.transcription or "").strip()]
+    num_non_error = len(filtered) - len(errors)
+    fpr = (len(early_final) / num_non_error) if num_non_error else None
+
     if not successful:
         return AggregateStatistics(
             service_name=svc,
             model_name=mdl,
             num_samples=len(filtered),
             num_errors=len(errors),
+            num_premature_eos=len(no_ttfb),
+            num_no_final=len(no_final),
+            fpr=fpr,
         )
 
     # Extract TTFB values
@@ -58,6 +75,9 @@ def compute_statistics(
         model_name=mdl,
         num_samples=len(filtered),
         num_errors=len(errors),
+        num_premature_eos=len(no_ttfb),
+        num_no_final=len(no_final),
+        fpr=fpr,
         ttfb_mean=statistics.mean(ttfb_values),
         ttfb_median=statistics.median(ttfb_values),
         ttfb_std=statistics.stdev(ttfb_values) if len(ttfb_values) > 1 else 0.0,
@@ -162,9 +182,28 @@ def format_statistics_table(stats_list: list[AggregateStatistics]) -> str:
         lines.append(f"Service: {stats.service_name.value}{model_str}")
         lines.append("-" * 40)
         lines.append(f"  Samples: {stats.num_samples} ({stats.num_errors} errors)")
+        num_non_error = stats.num_samples - stats.num_errors
+        num_valid = num_non_error - stats.num_premature_eos
+        num_early_final = stats.num_premature_eos - stats.num_no_final
+        lines.append(f"  Valid (measurable TTFB): {num_valid}/{num_non_error}")
+        if stats.fpr is not None and num_non_error:
+            lines.append(
+                f"  FPR (finalized before EOS, truncated): {stats.fpr * 100:.1f}% "
+                f"({num_early_final}/{num_non_error})"
+            )
+            lines.append(
+                f"  No final captured (no TTFB, empty): "
+                f"{stats.num_no_final / num_non_error * 100:.1f}% "
+                f"({stats.num_no_final}/{num_non_error})"
+            )
+            lines.append(
+                f"  Dropped from latency (total): "
+                f"{stats.num_premature_eos / num_non_error * 100:.1f}% "
+                f"({stats.num_premature_eos}/{num_non_error})"
+            )
 
         if stats.ttfb_mean is not None:
-            lines.append("  TTFB (seconds):")
+            lines.append("  TTFB (seconds, over valid subset):")
             lines.append(f"    Mean:   {stats.ttfb_mean:.3f}")
             lines.append(f"    Median: {stats.ttfb_median:.3f}")
             lines.append(f"    Std:    {stats.ttfb_std:.3f}")

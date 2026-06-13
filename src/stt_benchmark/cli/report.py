@@ -30,6 +30,25 @@ def _format_model_label(model_name: str | None) -> str:
     return model_name if model_name else "—"
 
 
+def _format_validity_metrics(
+    stats: AggregateStatistics | None,
+) -> tuple[str, str, str, str]:
+    """Format validity subset metrics matching the run-command summary."""
+    if stats is None:
+        return "-", "-", "-", "-"
+
+    num_non_error = stats.num_samples - stats.num_errors
+    if num_non_error == 0:
+        return "-", "-", "-", "-"
+
+    num_valid = num_non_error - stats.num_premature_eos
+    valid_str = f"{num_valid}/{num_non_error}"
+    fpr_str = f"{stats.fpr * 100:.1f}%" if stats.fpr is not None else "-"
+    no_final_str = f"{stats.num_no_final / num_non_error * 100:.1f}%"
+    dropped_str = f"{stats.num_premature_eos / num_non_error * 100:.1f}%"
+    return valid_str, fpr_str, no_final_str, dropped_str
+
+
 def _print_wide_table(table: Table, min_width: int) -> None:
     """Print a table using at least min_width so fixed numeric columns aren't squeezed."""
     width = max(min_width, console.size.width)
@@ -38,8 +57,8 @@ def _print_wide_table(table: Table, min_width: int) -> None:
 
 def _comparison_table_width(has_wer: bool) -> int:
     """Total Rich table width for the service comparison layout."""
-    # Service + Transcripts + 5 TTFS + Model; optional 3 WER columns.
-    width = 14 + 22 + (5 * 11) + 44
+    # Service + Transcripts + validity (4) + 5 TTFS + Model; optional 3 WER columns.
+    width = 14 + 22 + 10 + 8 + 10 + 10 + (5 * 11) + 44
     if has_wer:
         width += 10 + 11 + 12
     # Box borders and column separators.
@@ -162,6 +181,10 @@ async def _show_all_services_summary(db_path: Path | None = None):
     table = Table(title="Service Comparison", width=table_width)
     table.add_column("Service", style="cyan", no_wrap=True, width=14)
     table.add_column("Transcripts", justify="right", no_wrap=True, width=22)
+    table.add_column("Valid", justify="right", no_wrap=True, width=10)
+    table.add_column("FPR", justify="right", no_wrap=True, width=8)
+    table.add_column("No Final", justify="right", no_wrap=True, width=10)
+    table.add_column("Dropped", justify="right", no_wrap=True, width=10)
     table.add_column("TTFS Mean", justify="right", no_wrap=True, width=11)
     table.add_column("TTFS P50", justify="right", no_wrap=True, width=11)
     table.add_column("TTFS P90", justify="right", no_wrap=True, width=11)
@@ -193,9 +216,15 @@ async def _show_all_services_summary(db_path: Path | None = None):
             transcripts_pct = transcript_stats["success_rate"] * 100
             transcripts_str = f"{transcript_stats['successful_transcripts']}/{transcript_stats['total_runs']} ({transcripts_pct:.1f}%)"
 
+            valid_str, fpr_str, no_final_str, dropped_str = _format_validity_metrics(ttfs_stats)
+
             row_data = [
                 service_name.value,
                 transcripts_str,
+                valid_str,
+                fpr_str,
+                no_final_str,
+                dropped_str,
                 _format_ttfs_ms(ttfs_stats.ttfb_mean if ttfs_stats else None),
                 _format_ttfs_ms(ttfs_stats.ttfb_p50 if ttfs_stats else None),
                 _format_ttfs_ms(ttfs_stats.ttfb_p90 if ttfs_stats else None),

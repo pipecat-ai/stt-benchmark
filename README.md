@@ -37,113 +37,195 @@ Metric = TTFS (pipecat TTFB instrumentation): final `TranscriptionFrame` receipt
 − (Silero VAD stop − `--vad-stop-secs`, default 0.2 s). A final that fires
 *before* that anchor is unmeasurable, so premature endpointing shows up as a
 *missing* sample, not a fast one. Results go to `stt_benchmark_data/results.db`
-(or `test.db` with `--test`). Sample selection (dataset
+(or `test_results.db` with `--test`). Sample selection (dataset
 `pipecat-ai/smart-turn-data-v3.1-train`, seed 42) lives in
 `src/stt_benchmark/config.py` (env prefix `STT_BENCHMARK_`, `.env`), **not** as
 `run` flags; concurrency is 1.
 
-## Prerequisites
+## Setup
 
-1. **Audio present** — download once into `stt_benchmark_data/audio/`:
+Run all commands from the repo root. The harness uses [uv](https://docs.astral.sh/uv/)
+(Python 3.13 per `pyproject.toml`).
+
+```bash
+git clone <repo-url>
+cd stt-benchmark
+uv sync
+```
+
+1. **Install dependencies** — `uv sync` pulls Pipecat, `platform-proto` (private
+   git dep — SSH access to `ToolsAiforia/platform-proto` required), and the rest.
+   No API keys are needed for `asr_backend` or `speech_proxy`.
+2. **Download benchmark audio** — once, into `stt_benchmark_data/audio/`:
    ```bash
    uv run stt-benchmark download --num-samples 100
    ```
-2. **Target reachable** — the benchmark is only a gRPC **client**. Connection
-   settings are passed via CLI flags (defaults match local dev / staging):
+3. **Reach the target** — the benchmark is only a gRPC **client**. Ensure VPN /
+   network access to the endpoint you pass on the CLI:
    - *asr_backend / asr_backend_exteou* → `--asr-backend-url` (default
      `localhost:50052`), `--no-asr-backend-use-ssl` (default), `--language en`.
-     The `asr-backend-service` (fronting Triton) must already be running.
-     **No API key.**
+     For local dev, `asr-backend-service` (fronting Triton) must already be
+     running. **No API key.**
    - *speech_proxy* → `--speech-proxy-url` (default
      `speech-proxy.main.stage.aiphoria.pro:443`), `--speech-proxy-use-ssl`
-     (default), `--recognizer` (default `asr_deepgram_en_nova3`). The proxy talks
-     to the ASR backend server-side, so the **client needs no `DEEPGRAM_API_KEY`**
-     — only network reach to the proxy.
+     (default), `--recognizer` (default `asr_deepgram_en_nova3`). The proxy
+     resolves recognizers server-side — the **client needs no `DEEPGRAM_API_KEY`**.
 
-   Additional flag: `--chunk-ms` (input frame size, default 20 ms).
+   Optional `.env` / `STT_BENCHMARK_*` overrides for paths and dataset size; see
+   `env.example` and `src/stt_benchmark/config.py`.
 
-## Debug one sample (pipeline + VAD trace)
+## Debug mode (single sample)
 
-`stt-benchmark debug` runs a **single** utterance through the same Pipecat pipeline
+`stt-benchmark debug` runs **one** utterance through the same Pipecat pipeline
 as `run` (`SyntheticInputTransport` → Silero VAD → STT) and prints a stderr
-timeline: audio chunks, VAD start/stop, interim/final ASR, and TTFB. No DB writes.
+timeline: audio chunks, VAD start/stop, interim/final ASR, and TTFB. **No DB
+writes.** Exactly one service (`--services`), exactly one audio source
+(`--file`, `--sample-id`, or `--sample-index`).
 
 ```bash
-# Benchmark sample from main DB
+# List samples in the results DB
+uv run stt-benchmark debug --list-samples
+
+# Benchmark sample from main DB (index 0)
 uv run stt-benchmark debug --services asr_backend --sample-index 0
 
-# Custom file (wav/mp3/pcm)
-uv run stt-benchmark debug --services speech_proxy --file ./audio.wav \
-  --recognizer asr_deepgram_en_nova3
+# asr_backend against production
+uv run stt-benchmark debug --services asr_backend \
+  --asr-backend-url asr.prod.overtime.ai:443 --asr-backend-use-ssl \
+  --language en --chunk-ms 260 --sample-index 0
 
-# List samples
-uv run stt-benchmark debug --list-samples
+# speech_proxy — custom wav (see scripts/runs/run_debug.sh)
+uv run stt-benchmark debug --services speech_proxy \
+  --speech-proxy-url speech-proxy.main.stage.aiphoria.pro:443 \
+  --speech-proxy-use-ssl --recognizer asr_deepgram_flux_en \
+  --chunk-ms 100 --test --file /path/to/your/sample.wav
+
+# speech_proxy — benchmark sample from test DB
+uv run stt-benchmark debug --services speech_proxy \
+  --recognizer asr_deepgram_en_nova3_vad_v2 --sample-index 0 --test
 ```
 
-For **raw gRPC** tracing without VAD (direct to backend/proxy), use
-[`scripts/debug_stream_to_service.py`](scripts/debug_stream_to_service.py).
+Debug accepts the same gRPC / tuning flags as `run`: `--chunk-ms` (default 20 ms),
+`--vad-stop-secs`, `--asr-backend-url`, `--asr-backend-use-ssl`, `--language`,
+`--speech-proxy-url`, `--speech-proxy-use-ssl`, `--recognizer`, `--test`.
 
-## Concrete commands
+For **raw gRPC** tracing without the VAD pipeline, use
+[`scripts/direct_stream_to_service.py`](scripts/direct_stream_to_service.py).
+
+Reference launcher: [`scripts/runs/run_debug.sh`](scripts/runs/run_debug.sh).
+
+## Full benchmark runs
+
+Use `stt-benchmark run` for batch TTFS measurement. Workflow:
+
+1. **Smoke test** — `--test --limit 2` writes to `test_results.db` (safe to iterate).
+2. **Full run** — `--limit 100 --no-skip-existing` (add `--test` to keep results in
+   `test_results.db`, or omit it to write to `results.db`). The launchers in
+   `scripts/runs/run_speech_proxy_test.sh` use `--test` so prod/staging sweeps don't
+   touch the main DB.
+3. **Tag the run** — `--model` stores a label in the DB so you can compare configs
+   in `report`.
+
+Common tuning for our stack: `--chunk-ms 260` (matches production frame size).
+
+### A. Direct asr-backend
 
 ```bash
-# Always run from the harness dir, via its uv env:
-cd /home/mle/asr-junk/danil-andreev/tasks/deepgram_vs_ours_latency/stt-benchmark
-
-# --- A. direct asr-backend path (our ASR) ---
-# 1. Smoke-test: 2 samples into the throwaway --test DB
+# Smoke (local default)
 uv run stt-benchmark run --services asr_backend --limit 2 --test
-# 2. Full product-latency run (Setup 1a)
-uv run stt-benchmark run --services asr_backend --limit 100 --no-skip-existing
-# 3. Both of ours in one run (comma-separated) -> gives the 1a vs 1b gap
-uv run stt-benchmark run --services asr_backend,asr_backend_exteou --limit 100 --no-skip-existing
 
-# --- B. production speech-proxy path ---
-# 4. Smoke the proxy + vad_v2 recognizer first (cheap, throwaway DB)
+# Production ASR backend
+uv run stt-benchmark run --services asr_backend \
+  --asr-backend-url asr.prod.overtime.ai:443 --asr-backend-use-ssl \
+  --language en --chunk-ms 260 --test --limit 100 --no-skip-existing \
+  --model prod_overtime_asr_backend_en_2026_06_13
+
+# Compare native in-Triton EOU vs external EOU (1a vs 1b)
+uv run stt-benchmark run --services asr_backend,asr_backend_exteou \
+  --limit 100 --no-skip-existing
+```
+
+Reference launcher: [`scripts/runs/run_asr_backend_test.sh`](scripts/runs/run_asr_backend_test.sh).
+
+### B. Production speech-proxy
+
+```bash
+# Smoke (staging default URL + recognizer)
 uv run stt-benchmark run --services speech_proxy \
   --recognizer asr_deepgram_en_nova3_vad_v2 --limit 2 --test
-# 5. Full re-measure of the vad_v2 fix recognizer
+
+# Production speech-proxy — Aiphoria recognizer
 uv run stt-benchmark run --services speech_proxy \
-  --recognizer asr_deepgram_en_nova3_vad_v2 --limit 100 --no-skip-existing
-# 6. Local proxy dev (no TLS)
+  --speech-proxy-url speech-proxy.prod.overtime.ai:443 --speech-proxy-use-ssl \
+  --recognizer aiphoria__en --chunk-ms 260 --test --limit 100 \
+  --no-skip-existing \
+  --model prod_overtime_speech_proxy_aiphoria_en_2026_06_13
+
+# Staging — Deepgram nova3 VAD v2
+uv run stt-benchmark run --services speech_proxy \
+  --speech-proxy-url speech-proxy.main.stage.aiphoria.pro:443 \
+  --speech-proxy-use-ssl --recognizer asr_deepgram_en_nova3_vad_v2 \
+  --chunk-ms 260 --test --limit 100 --no-skip-existing \
+  --model main_stage_speech_proxy_deepgram_en_nova3_vad_v2_2026_06_13
+
+# Staging — Deepgram Flux
+uv run stt-benchmark run --services speech_proxy \
+  --speech-proxy-url speech-proxy.main.stage.aiphoria.pro:443 \
+  --speech-proxy-use-ssl --recognizer asr_deepgram_flux_en \
+  --chunk-ms 260 --test --limit 100 --no-skip-existing \
+  --model main_stage_speech_proxy_deepgram_flux_en_2026_06_13
+
+# Local proxy dev (no TLS)
 uv run stt-benchmark run --services speech_proxy \
   --speech-proxy-url localhost:50053 --no-speech-proxy-use-ssl \
   --recognizer asr_deepgram_en_nova3 --limit 2 --test
-
-# --- tuning + reporting (apply to either path) ---
-# 7. Tighten / loosen the speech-end anchor
-uv run stt-benchmark run --services asr_backend --limit 100 --vad-stop-secs 0.3 --no-skip-existing
-# 8. Larger input chunks
-uv run stt-benchmark run --services asr_backend --chunk-ms 100 --limit 2 --test
-# 9. Aggregate -> report
-uv run stt-benchmark report               # built-in reporter (all services in the DB)
-uv run python ../make_report.py           # task's curated TTFS table+json into ../results/
-# For the proxy/vad_v2 path also run the validity-aware analysis (kept% + early-final gate):
-uv run python ../analyze_vad_v2_refix_20260530.py
 ```
 
-`run` flags (`src/stt_benchmark/cli/benchmark.py`, registered as `run` in
-`cli/main.py`): `--services/-s` (comma-separated names, or `all`), `--limit/-n N`,
-`--model/-m`, `--skip-existing/--no-skip-existing` (default **skip**; pass
-`--no-skip-existing` to re-measure rows already in the DB), `--vad-stop-secs/-v`
-(default 0.2), `--chunk-ms` (input frame size, default 20),
-`--asr-backend-url`, `--asr-backend-use-ssl/--no-asr-backend-use-ssl`,
-`--language`, `--speech-proxy-url`, `--speech-proxy-use-ssl/--no-speech-proxy-use-ssl`,
-`--recognizer`,
-`--test/-t` (use the separate test DB so you don't touch the real
-`results.db`). Seed/dataset come from config.
+Reference launchers: [`scripts/runs/run_speech_proxy_test.sh`](scripts/runs/run_speech_proxy_test.sh)
+(copied commands above).
+
+### Reporting
+
+```bash
+uv run stt-benchmark report                  # all services in results.db
+uv run stt-benchmark report --test           # test_results.db
+uv run stt-benchmark report --service speech_proxy
+```
+
+Pareto plots: [`scripts/README.md`](scripts/README.md) (`pareto-frontier-plot.py`).
+
+## CLI flags (run + debug)
+
+Defined in `src/stt_benchmark/cli/benchmark.py` and `cli/debug.py`:
+
+| Flag | Default | Notes |
+|------|---------|-------|
+| `--services/-s` | `all` (run only) | Comma-separated; debug requires exactly one |
+| `--limit/-n` | all samples | run only |
+| `--model/-m` | service default | Label stored in DB |
+| `--skip-existing/--no-skip-existing` | skip | Use `--no-skip-existing` to re-measure |
+| `--vad-stop-secs/-v` | 0.2 | Speech-end anchor offset |
+| `--chunk-ms` | 20 | Input frame size (ms) |
+| `--asr-backend-url` | `localhost:50052` | |
+| `--asr-backend-use-ssl` | off | |
+| `--language` | `en` | asr_backend only |
+| `--speech-proxy-url` | staging host:443 | |
+| `--speech-proxy-use-ssl` | on | |
+| `--recognizer` | `asr_deepgram_en_nova3` | speech_proxy only |
+| `--test/-t` | off | Use `test_results.db` instead of `results.db` |
+
+Other commands: `download`, `report`, `ground-truth`, `wer`, `export`. Service
+names are registered in `src/stt_benchmark/models.py`.
 
 > ⚠️ **Validity caveat for aggressive VAD recognizers** (e.g.
 > `asr_deepgram_en_nova3_vad_v2`). Their aggressive VAD often endpoints before
 > the Silero speech-end anchor and/or truncates long turns, so a raw TTFS
-> percentile over the DB is misleading. Gate on transcript completeness (kept% vs
-> a full-turn reference recognizer) and drop early/no-TTFB rows before reading
-> latency — that's exactly what `../analyze_vad_v2_refix_20260530.py` does. See
-> `../README.md` (task root) for the full 2026-05-30 result.
+> percentile over the DB is misleading. Use debug mode to inspect individual
+> samples, and gate on transcript completeness before reading latency percentiles.
 
-> Task-dir convention: give each real run its own launcher script + log/marker
-> (see `../run_*_*.sh`). Available commands: `run`, `debug`, `download`, `report`,
-> `ground-truth`, `wer`, `export` (the registered service names live in
-> `models.py`).
+> **Convention:** keep repeatable launchers under `scripts/runs/` (see
+> `run_speech_proxy_test.sh`, `run_asr_backend_test.sh`, `run_debug.sh`) and give
+> each production run a distinct `--model` name.
 
 ---
 
@@ -228,7 +310,7 @@ uv run stt-benchmark report
 
 ## Installation
 
-Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
+Requires Python 3.13+ and [uv](https://docs.astral.sh/uv/).
 
 ```bash
 git clone <repo-url>
@@ -354,7 +436,8 @@ See [docs/cli.md](docs/cli.md) for complete CLI reference.
 ```
 stt_benchmark_data/
 ├── audio/                    # Downloaded audio files
-├── results.db                # SQLite database
+├── results.db                # SQLite database (main runs)
+├── test_results.db           # Separate DB when using --test
 ├── ground_truth_runs/        # Iteration JSONL files
 ├── validation_summary.txt    # Generated reports
 └── validation_full.csv

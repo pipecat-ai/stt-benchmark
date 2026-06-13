@@ -1,5 +1,18 @@
 # Scripts
 
+## Run launchers
+
+Repeatable benchmark commands live under `scripts/runs/`:
+
+| Script | Purpose |
+|--------|---------|
+| [`runs/run_speech_proxy_test.sh`](runs/run_speech_proxy_test.sh) | Full `--test` runs for `speech_proxy` (prod + staging recognizers) |
+| [`runs/run_asr_backend_test.sh`](runs/run_asr_backend_test.sh) | Full `--test` run for prod `asr_backend` |
+| [`runs/run_debug.sh`](runs/run_debug.sh) | Single-sample `debug` against speech-proxy with a custom wav |
+
+Copy/adapt these when pointing at new endpoints or recognizers. See the in-house
+section of the [root README](../README.md) for setup and flag reference.
+
 ## Pareto Frontier Plot
 
 `pareto-frontier-plot.py` generates scatter plots of TTFS latency vs Semantic WER with a Pareto frontier overlay.

@@ -8,13 +8,42 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from stt_benchmark.analysis.statistics import compute_statistics
 from stt_benchmark.config import get_config
-from stt_benchmark.models import ServiceName
+from stt_benchmark.models import AggregateStatistics, ServiceName
 from stt_benchmark.services import parse_service_name
 from stt_benchmark.storage.database import Database
 
 app = typer.Typer()
 console = Console()
+
+
+def _format_ttfs_ms(seconds: float | None) -> str:
+    """Format TTFS seconds as milliseconds, or dash if unavailable."""
+    if seconds is None:
+        return "-"
+    return f"{seconds * 1000:.0f}ms"
+
+
+def _format_model_label(model_name: str | None) -> str:
+    """Format model tag for display (empty DB values show as em dash)."""
+    return model_name if model_name else "—"
+
+
+def _print_wide_table(table: Table, min_width: int) -> None:
+    """Print a table using at least min_width so fixed numeric columns aren't squeezed."""
+    width = max(min_width, console.size.width)
+    Console(width=width, force_terminal=True).print(table)
+
+
+def _comparison_table_width(has_wer: bool) -> int:
+    """Total Rich table width for the service comparison layout."""
+    # Service + Transcripts + 5 TTFS + Model; optional 3 WER columns.
+    width = 14 + 22 + (5 * 11) + 44
+    if has_wer:
+        width += 10 + 11 + 12
+    # Box borders and column separators.
+    return width + 12
 
 
 def parse_service(service: str) -> ServiceName:
@@ -128,21 +157,29 @@ async def _show_all_services_summary(db_path: Path | None = None):
     # Check if any services have WER
     has_any_wer = len(services_with_wer) > 0
 
-    # Build summary table (matches README format)
-    table = Table(title="Service Comparison")
-    table.add_column("Service", style="cyan", no_wrap=True)
-    table.add_column("Transcripts", justify="right")
+    # Numeric columns before Model so TTFS values aren't squeezed on narrow terminals.
+    table_width = _comparison_table_width(has_any_wer)
+    table = Table(title="Service Comparison", width=table_width)
+    table.add_column("Service", style="cyan", no_wrap=True, width=14)
+    table.add_column("Transcripts", justify="right", no_wrap=True, width=22)
+    table.add_column("TTFS Mean", justify="right", no_wrap=True, width=11)
+    table.add_column("TTFS P50", justify="right", no_wrap=True, width=11)
+    table.add_column("TTFS P90", justify="right", no_wrap=True, width=11)
+    table.add_column("TTFS P95", justify="right", no_wrap=True, width=11)
+    table.add_column("TTFS P99", justify="right", no_wrap=True, width=11)
     if has_any_wer:
-        table.add_column("Perfect", justify="right")
-        table.add_column("WER Mean", justify="right")
-        table.add_column("Pooled WER", justify="right")
-    table.add_column("TTFS Median", justify="right")
-    table.add_column("TTFS P95", justify="right")
-    table.add_column("TTFS P99", justify="right")
+        table.add_column("Perfect", justify="right", no_wrap=True, width=10)
+        table.add_column("WER Mean", justify="right", no_wrap=True, width=11)
+        table.add_column("Pooled WER", justify="right", no_wrap=True, width=12)
+    table.add_column("Model", style="dim", no_wrap=True, overflow="ellipsis", width=44)
 
-    summaries = []
+    summaries: list[
+        tuple[ServiceName, str | None, dict, dict | None, AggregateStatistics | None]
+    ] = []
     for service_name, model_name in services_with_results:
         transcript_stats = await db.get_service_transcript_stats(service_name, model_name)
+        results = await db.get_results_for_service(service_name, model_name)
+        ttfs_stats = compute_statistics(results, service_name, model_name)
 
         # Get WER summary if available
         wer_summary = None
@@ -150,7 +187,7 @@ async def _show_all_services_summary(db_path: Path | None = None):
             wer_summary = await db.get_service_summary(service_name, model_name)
 
         if transcript_stats:
-            summaries.append((service_name, model_name, transcript_stats, wer_summary))
+            summaries.append((service_name, model_name, transcript_stats, wer_summary, ttfs_stats))
 
             # Format transcripts as m/n (x%)
             transcripts_pct = transcript_stats["success_rate"] * 100
@@ -159,6 +196,11 @@ async def _show_all_services_summary(db_path: Path | None = None):
             row_data = [
                 service_name.value,
                 transcripts_str,
+                _format_ttfs_ms(ttfs_stats.ttfb_mean if ttfs_stats else None),
+                _format_ttfs_ms(ttfs_stats.ttfb_p50 if ttfs_stats else None),
+                _format_ttfs_ms(ttfs_stats.ttfb_p90 if ttfs_stats else None),
+                _format_ttfs_ms(ttfs_stats.ttfb_p95 if ttfs_stats else None),
+                _format_ttfs_ms(ttfs_stats.ttfb_p99 if ttfs_stats else None),
             ]
 
             if has_any_wer:
@@ -180,24 +222,18 @@ async def _show_all_services_summary(db_path: Path | None = None):
                 else:
                     row_data.extend(["-", "-", "-"])
 
-            row_data.extend(
-                [
-                    f"{transcript_stats['ttfb_median'] * 1000:.0f}ms",
-                    f"{transcript_stats['ttfb_p95'] * 1000:.0f}ms",
-                    f"{transcript_stats['ttfb_p99'] * 1000:.0f}ms",
-                ]
-            )
+            row_data.append(_format_model_label(model_name))
 
             table.add_row(*row_data)
 
     await db.close()
 
-    console.print(table)
+    _print_wide_table(table, table_width)
 
     # Show rankings
     if summaries:
         # WER rankings (only if we have WER data)
-        summaries_with_wer = [(s, m, ts, ws) for s, m, ts, ws in summaries if ws is not None]
+        summaries_with_wer = [(s, m, ts, ws, ttfs) for s, m, ts, ws, ttfs in summaries if ws is not None]
         if summaries_with_wer:
             console.print("\n[bold]Rankings (by Perfect %):[/bold]")
             ranked_perfect = sorted(
@@ -207,7 +243,7 @@ async def _show_all_services_summary(db_path: Path | None = None):
                 ),
                 reverse=True,
             )
-            for i, (service, model, _, wer_summary) in enumerate(ranked_perfect, 1):
+            for i, (service, model, _, wer_summary, _) in enumerate(ranked_perfect, 1):
                 medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
                 name = f"{service.value}" + (f" ({model})" if model else "")
                 perfect_pct = (
@@ -219,18 +255,22 @@ async def _show_all_services_summary(db_path: Path | None = None):
 
             console.print("\n[bold]Rankings (by Pooled WER):[/bold]")
             ranked_wer = sorted(summaries_with_wer, key=lambda x: x[3]["pooled_wer"])
-            for i, (service, model, _, wer_summary) in enumerate(ranked_wer, 1):
+            for i, (service, model, _, wer_summary, _) in enumerate(ranked_wer, 1):
                 medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
                 name = f"{service.value}" + (f" ({model})" if model else "")
                 console.print(f"  {medal} {name}: {wer_summary['pooled_wer'] * 100:.2f}%")
 
         # TTFS rankings
-        console.print("\n[bold]Rankings (by TTFS Median):[/bold]")
-        ranked_ttfs = sorted(summaries, key=lambda x: x[2]["ttfb_median"])
-        for i, (service, model, transcript_stats, _) in enumerate(ranked_ttfs, 1):
+        console.print("\n[bold]Rankings (by TTFS P50):[/bold]")
+        ranked_ttfs = sorted(
+            summaries,
+            key=lambda x: x[4].ttfb_p50 if x[4] and x[4].ttfb_p50 is not None else float("inf"),
+        )
+        for i, (service, model, _, _, ttfs_stats) in enumerate(ranked_ttfs, 1):
             medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
             name = f"{service.value}" + (f" ({model})" if model else "")
-            console.print(f"  {medal} {name}: {transcript_stats['ttfb_median'] * 1000:.0f}ms")
+            ttfs_label = _format_ttfs_ms(ttfs_stats.ttfb_p50 if ttfs_stats else None)
+            console.print(f"  {medal} {name}: {ttfs_label}")
 
     if not services_with_wer:
         console.print("\n[dim]Run 'stt-benchmark wer' to calculate semantic WER metrics.[/dim]")

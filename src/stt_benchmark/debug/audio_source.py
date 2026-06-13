@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
+from pydub import AudioSegment
+from pydub.exceptions import PydubException
 from rich.console import Console
 from rich.table import Table
 
@@ -90,16 +92,40 @@ async def resolve_sample(
         await db.close()
 
 
+def _resample_pcm(
+    pcm: bytes,
+    *,
+    source_rate: int,
+    target_rate: int,
+) -> bytes:
+    if source_rate == target_rate:
+        return pcm
+
+    audio = AudioSegment(
+        data=pcm,
+        sample_width=BYTE_PER_SAMPLE,
+        frame_rate=source_rate,
+        channels=1,
+    )
+    return audio.set_frame_rate(target_rate).raw_data
+
+
 def load_audio_file(
     path: Path,
     *,
     sample_rate: int = 16000,
+    source_sample_rate: int | None = None,
     channel: Channel = "left",
 ) -> tuple[bytes, float]:
-    """Load audio as 16-bit mono PCM bytes and return duration in seconds."""
+    """Load audio as 16-bit mono PCM at ``sample_rate`` and return duration in seconds."""
     suffix = path.suffix.lower()
     if suffix == ".pcm":
-        pcm = path.read_bytes()
+        source_rate = source_sample_rate or get_config().sample_rate
+        pcm = _resample_pcm(
+            path.read_bytes(),
+            source_rate=source_rate,
+            target_rate=sample_rate,
+        )
     elif suffix in SUPPORTED_MEDIA_SUFFIXES:
         pcm = _decode_media_file(path, channel=channel, sample_rate=sample_rate)
     else:
@@ -115,12 +141,7 @@ def load_audio_file(
 def _decode_media_file(path: Path, *, channel: Channel, sample_rate: int) -> bytes:
     audio_format = path.suffix.lower().removeprefix(".")
     try:
-        from pydub import AudioSegment
-        from pydub.exceptions import PydubException
-
         audio = AudioSegment.from_file(path, format=audio_format)
-    except ImportError as exc:
-        raise ValueError("Decoding .wav/.mp3 requires pydub (pip install pydub).") from exc
     except (PydubException, ValueError, OSError) as exc:
         raise ValueError(f"Couldn't decode {path}") from exc
 

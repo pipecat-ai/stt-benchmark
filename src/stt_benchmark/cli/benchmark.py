@@ -63,6 +63,12 @@ def run_benchmark(
         "--chunk-ms",
         help="Input audio chunk duration in milliseconds",
     ),
+    sample_rate: int = typer.Option(
+        16000,
+        "--sample-rate",
+        min=8000,
+        help="Target PCM sample rate in Hz; audio is resampled before recognition",
+    ),
     asr_backend_url: str = typer.Option(
         "localhost:50052",
         "--asr-backend-url",
@@ -125,6 +131,7 @@ def run_benchmark(
     console.print(f"Skip existing: {skip_existing}")
     console.print(f"VAD stop secs: {vad_stop_secs}")
     console.print(f"Chunk ms: {chunk_ms}")
+    console.print(f"Sample rate: {sample_rate} Hz")
     if test:
         console.print("[yellow]Test mode: using separate test database[/yellow]")
 
@@ -172,10 +179,12 @@ def run_benchmark(
             speech_proxy_url=speech_proxy_url,
             speech_proxy_use_ssl=speech_proxy_use_ssl,
             speech_proxy_recognizer=recognizer,
+            sample_rate=sample_rate,
         )
         runner = BenchmarkRunner(
             vad_stop_secs=vad_stop_secs,
             chunk_ms=chunk_ms,
+            sample_rate=sample_rate,
             grpc_options=grpc_options,
         )
 

@@ -77,7 +77,7 @@ class BenchmarkRunner:
         Returns:
             BenchmarkResult with TTFB and transcription.
         """
-        # Load audio data
+        # Load audio data (resample to runner sample rate when needed)
         audio_path = Path(sample.audio_path)
         if not audio_path.exists():
             return BenchmarkResult(
@@ -88,7 +88,12 @@ class BenchmarkRunner:
                 error=f"Audio file not found: {audio_path}",
             )
 
-        audio_data = audio_path.read_bytes()
+        from stt_benchmark.debug.audio_source import load_audio_file
+
+        audio_data, _ = load_audio_file(
+            audio_path,
+            sample_rate=self.sample_rate,
+        )
 
         # Set up observers
         metrics_observer = MetricsCollectorObserver()
@@ -171,7 +176,19 @@ class BenchmarkRunner:
                     error=result.error,
                 )
                 return result
-            audio_data = audio_path.read_bytes()
+            from stt_benchmark.debug.audio_source import load_audio_file
+
+            audio_data, duration_seconds = load_audio_file(
+                audio_path,
+                sample_rate=self.sample_rate,
+            )
+            sample = AudioSample(
+                sample_id=sample.sample_id,
+                audio_path=sample.audio_path,
+                duration_seconds=duration_seconds,
+                language=sample.language,
+                dataset_index=sample.dataset_index,
+            )
         debug_observer = DebugTraceObserver()
         debug_observer.log_start(
             service=service_name.value,

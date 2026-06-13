@@ -63,7 +63,8 @@ class AsrBackendService(STTService):
         url: str = "localhost:50052",
         use_ssl: bool = False,
         language: str = "en",
-        audio_format: str = "PCM_S16_LE_16000",
+        sample_rate: int = 16000,
+        audio_format: str | None = None,
         mode: str = "native_eou",
         max_silence_ms: int = 640,
         **kwargs,
@@ -72,6 +73,7 @@ class AsrBackendService(STTService):
             stt_ttfb_timeout=8.0,
             ttfs_p99_latency=1.0,
             settings=STTSettings(model="aiphoria-ctc-160ms", language=Language.EN),
+            sample_rate=sample_rate,
             **kwargs,
         )
         if mode not in ("native_eou", "external_eou"):
@@ -79,7 +81,7 @@ class AsrBackendService(STTService):
         self._url = url
         self._use_ssl = use_ssl
         self._language = language
-        self._audio_format = audio_format
+        self._audio_format = audio_format or f"PCM_S16_LE_{sample_rate}"
         self._mode = mode
         self._max_silence_ms = max_silence_ms
         self._channel: grpc.aio.Channel | None = None

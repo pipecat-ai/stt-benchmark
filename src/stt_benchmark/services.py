@@ -63,6 +63,7 @@ class GrpcServiceOptions:
     speech_proxy_url: str = "speech-proxy.main.stage.aiphoria.pro:443"
     speech_proxy_use_ssl: bool = True
     speech_proxy_recognizer: str = "asr_deepgram_en_nova3"
+    sample_rate: int = 16000
 
 
 @dataclass
@@ -157,6 +158,7 @@ def create_asr_backend(
         url=opts.asr_backend_url,
         use_ssl=opts.asr_backend_use_ssl,
         language=opts.asr_backend_language,
+        sample_rate=opts.sample_rate,
         mode="native_eou",
     )
 
@@ -172,6 +174,7 @@ def create_asr_backend_exteou(
         url=opts.asr_backend_url,
         use_ssl=opts.asr_backend_use_ssl,
         language=opts.asr_backend_language,
+        sample_rate=opts.sample_rate,
         mode="external_eou",
     )
 
@@ -207,6 +210,7 @@ def create_speech_proxy(
         url=opts.speech_proxy_url,
         use_ssl=opts.speech_proxy_use_ssl,
         recognizer=opts.speech_proxy_recognizer,
+        sample_rate=opts.sample_rate,
     )
 
 

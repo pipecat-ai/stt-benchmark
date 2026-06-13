@@ -78,6 +78,12 @@ def debug_run(
         "--chunk-ms",
         help="Input audio chunk duration in milliseconds",
     ),
+    sample_rate: int = typer.Option(
+        16000,
+        "--sample-rate",
+        min=8000,
+        help="Target PCM sample rate in Hz; audio is resampled before recognition",
+    ),
     asr_backend_url: str = typer.Option(
         "localhost:50052",
         "--asr-backend-url",
@@ -135,17 +141,19 @@ def debug_run(
             speech_proxy_url=speech_proxy_url,
             speech_proxy_use_ssl=speech_proxy_use_ssl,
             speech_proxy_recognizer=recognizer,
+            sample_rate=sample_rate,
         )
         runner = BenchmarkRunner(
             vad_stop_secs=vad_stop_secs,
             chunk_ms=chunk_ms,
+            sample_rate=sample_rate,
             grpc_options=grpc_options,
         )
 
         audio_data: bytes | None = None
         source_label: str
         if file is not None:
-            audio_data, duration_seconds = load_audio_file(file)
+            audio_data, duration_seconds = load_audio_file(file, sample_rate=sample_rate)
             sample = AudioSample(
                 sample_id="debug",
                 audio_path=str(file),

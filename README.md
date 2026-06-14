@@ -18,7 +18,7 @@ Benchmark results on 1000 samples from the `pipecat-ai/smart-turn-data-v3.1-trai
 | Deepgram | nova-3-general | 99.8% | 76.5% | 1.71% | 1.62% | 247ms | 298ms | 326ms |
 | ElevenLabs | scribe_v2_realtime | 99.7% | 81.3% | 3.16% | 3.12% | 281ms | 348ms | 407ms |
 | Google | latest-long | 100.0% | 69.0% | 2.84% | 2.85% | 878ms | 1155ms | 1570ms |
-| Gradium | default | 99.7% | 65.3% | 3.72% | 3.96% | 570ms | 595ms | 614ms |
+| Gradium | default | 99.8% | 65.1% | 3.56% | 3.71% | 570ms | 596ms | 622ms |
 | Mistral | voxtral-mini-transcribe-realtime-2602 | 99.3% | 68.8% | 4.44% | 4.97% | 525ms | 973ms | 1913ms |
 | NVIDIA | Nemotron 3.0 ASR (en) | 100.0% | 76.1% | 1.90% | 1.95% | 221ms | 238ms | 252ms |
 | NVIDIA | Nemotron 3.5 ASR (multilingual) | 99.6% | 62.0% | 4.54% | 4.58% | 236ms | 253ms | 266ms |

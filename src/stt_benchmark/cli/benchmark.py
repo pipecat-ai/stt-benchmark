@@ -105,6 +105,21 @@ def run_benchmark(
         "-t",
         help="Use separate test database (test_results.db) to avoid affecting real data",
     ),
+    flux_aggressive_eou: bool = typer.Option(
+        False,
+        "--flux-aggressive-eou",
+        help=(
+            "Enable Deepgram Flux eager end-of-turn mode for voice agents "
+            "(sets eager_eot_threshold; finalizes on EagerEndOfTurn)"
+        ),
+    ),
+    flux_eager_eot_threshold: float = typer.Option(
+        0.5,
+        "--flux-eager-eot-threshold",
+        min=0.3,
+        max=0.9,
+        help="Eager EOT confidence threshold when --flux-aggressive-eou is set (0.3-0.9)",
+    ),
 ):
     """Run STT TTFB benchmarks on configured services.
 
@@ -132,6 +147,10 @@ def run_benchmark(
     console.print(f"VAD stop secs: {vad_stop_secs}")
     console.print(f"Chunk ms: {chunk_ms}")
     console.print(f"Sample rate: {sample_rate} Hz")
+    if flux_aggressive_eou:
+        console.print(
+            f"Flux aggressive EOU: enabled (eager_eot_threshold={flux_eager_eot_threshold})"
+        )
     if test:
         console.print("[yellow]Test mode: using separate test database[/yellow]")
 
@@ -180,6 +199,8 @@ def run_benchmark(
             speech_proxy_use_ssl=speech_proxy_use_ssl,
             speech_proxy_recognizer=recognizer,
             sample_rate=sample_rate,
+            flux_aggressive_eou=flux_aggressive_eou,
+            flux_eager_eot_threshold=flux_eager_eot_threshold,
         )
         runner = BenchmarkRunner(
             vad_stop_secs=vad_stop_secs,

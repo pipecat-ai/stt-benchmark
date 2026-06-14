@@ -22,6 +22,8 @@ classifiers = [
 dependencies = [
     # Pipecat with STT providers
     "pipecat-ai[assemblyai,aws,azure,cartesia,deepgram,elevenlabs,fal,gladia,google,gradium,groq,mistral,nvidia,openai,sagemaker,sarvam,smallest,soniox,speechmatics,whisper,silero,soundfile,xai]>=1,<2",
+    # Direct Deepgram SDK (Nova v1 + Flux /v2/listen); also via pipecat-ai[deepgram]
+    "deepgram-sdk>=7.0.0,<8",
     # Dataset handling
     "datasets>=2.16.0,<3.0.0",
     "scipy>=1.11.0",

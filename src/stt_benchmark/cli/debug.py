@@ -114,6 +114,21 @@ def debug_run(
         "--recognizer",
         help="Recognizer name for speech_proxy",
     ),
+    flux_aggressive_eou: bool = typer.Option(
+        False,
+        "--flux-aggressive-eou",
+        help=(
+            "Enable Deepgram Flux eager end-of-turn mode for voice agents "
+            "(sets eager_eot_threshold; finalizes on EagerEndOfTurn)"
+        ),
+    ),
+    flux_eager_eot_threshold: float = typer.Option(
+        0.5,
+        "--flux-eager-eot-threshold",
+        min=0.3,
+        max=0.9,
+        help="Eager EOT confidence threshold when --flux-aggressive-eou is set (0.3-0.9)",
+    ),
 ) -> None:
     """Debug one audio sample through the benchmark pipeline with VAD + ASR tracing."""
     if list_samples_flag:
@@ -142,6 +157,8 @@ def debug_run(
             speech_proxy_use_ssl=speech_proxy_use_ssl,
             speech_proxy_recognizer=recognizer,
             sample_rate=sample_rate,
+            flux_aggressive_eou=flux_aggressive_eou,
+            flux_eager_eot_threshold=flux_eager_eot_threshold,
         )
         runner = BenchmarkRunner(
             vad_stop_secs=vad_stop_secs,

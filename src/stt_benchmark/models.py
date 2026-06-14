@@ -41,6 +41,7 @@ class ServiceName(str, Enum):
     ASR_BACKEND_EXTEOU = "asr_backend_exteou"  # setup 1b: our ASR + shared external EOU
     DEEPGRAM_EXTEOU = "deepgram_exteou"  # setup 3: Deepgram ASR + shared external EOU
     DEEPGRAM_NATIVE = "deepgram_native"  # setup 2b: Deepgram ASR + Deepgram native endpointing
+    DEEPGRAM_FLUX = "deepgram_flux"  # Flux via Deepgram /v2/listen API
     SPEECH_PROXY = "speech_proxy"  # setup 4: ASR via speech-proxy (gRPC v2)
 
 

@@ -64,6 +64,8 @@ class GrpcServiceOptions:
     speech_proxy_use_ssl: bool = True
     speech_proxy_recognizer: str = "asr_deepgram_en_nova3"
     sample_rate: int = 16000
+    flux_aggressive_eou: bool = False
+    flux_eager_eot_threshold: float = 0.5
 
 
 @dataclass
@@ -214,19 +216,23 @@ def create_speech_proxy(
     )
 
 
-def create_deepgram_flux() -> FrameProcessor:
-    """Deepgram Flux via the production speech-proxy (recognizer asr_deepgram_flux_en).
-
-    Flux self-endpoints with a single complete is_final per turn (same client
-    contract as nova3), so the standard proxy client handles it unchanged; only
-    the recognizer differs. Reliable 99/100 with full transcripts, vs the unstable
-    vad_v2 (~50% no-final/timeout). See the task README for the evaluation.
-    """
+def create_deepgram_flux(
+    grpc_options: GrpcServiceOptions | None = None,
+) -> FrameProcessor:
+    """Deepgram Flux via the direct Deepgram /v2/listen API (flux-general-en)."""
     from stt_benchmark.services_aiphoria.deepgram_flux import (
         DeepgramFluxSTTService,
     )
 
-    return DeepgramFluxSTTService()
+    opts = grpc_options or GrpcServiceOptions()
+    eager_eot_threshold = (
+        opts.flux_eager_eot_threshold if opts.flux_aggressive_eou else None
+    )
+    return DeepgramFluxSTTService(
+        api_key=_get_env("DEEPGRAM_API_KEY"),
+        eager_eot_threshold=eager_eot_threshold,
+        finalize_on_eager_eot=opts.flux_aggressive_eou,
+    )
 
 
 def create_elevenlabs() -> FrameProcessor:
@@ -500,7 +506,7 @@ STT_SERVICES: dict[str, ServiceDefinition] = {
     ),
     "deepgram_flux": ServiceDefinition(
         factory=create_deepgram_flux,
-        required_env_vars=[],  # TLS only; Deepgram key is server-side on the proxy
+        required_env_vars=["DEEPGRAM_API_KEY"],
     ),
     "elevenlabs": ServiceDefinition(
         factory=create_elevenlabs,
@@ -635,6 +641,7 @@ _GRPC_SERVICE_FACTORIES = {
     "asr_backend": create_asr_backend,
     "asr_backend_exteou": create_asr_backend_exteou,
     "speech_proxy": create_speech_proxy,
+    "deepgram_flux": create_deepgram_flux,
 }
 
 

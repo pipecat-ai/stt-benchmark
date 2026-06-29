@@ -19,7 +19,7 @@ app = typer.Typer(
 # Add subcommands
 app.add_typer(download_app, name="download", help="Download and prepare audio samples")
 app.add_typer(benchmark_app, name="run", help="Run STT benchmarks")
-app.add_typer(ground_truth_app, name="ground-truth", help="Generate ground truth using Gemini")
+app.add_typer(ground_truth_app, name="ground-truth", help="Generate ground truth transcriptions")
 app.add_typer(wer_app, name="wer", help="Calculate semantic WER metrics")
 app.add_typer(report_app, name="report", help="Generate reports and compare services")
 app.add_typer(export_app, name="export", help="Export data for a specific service")

@@ -2,6 +2,8 @@
 
 A framework for benchmarking Speech-to-Text services with TTFS (Time To Final Segment) latency and Semantic WER (Word Error Rate) accuracy measurement.
 
+> **Note:** The results below use ground truth that was human-reviewed after batch transcription. If you reproduce the benchmark yourself, the generated ground truth (via Gemini Flash or ElevenLabs Scribe v2) will not have human review and may contain inaccuracies that affect WER scores. Results should be interpreted as relative comparisons between services rather than absolute accuracy metrics.
+
 ## Results Summary
 
 Benchmark results on 1000 samples from the `pipecat-ai/smart-turn-data-v3.1-train` dataset.
@@ -101,8 +103,9 @@ uv run stt-benchmark download --num-samples 100
 # Run benchmarks
 uv run stt-benchmark run --services deepgram,openai
 
-# Generate ground truth (Gemini)
-uv run stt-benchmark ground-truth
+# Generate ground truth
+uv run stt-benchmark ground-truth                  # Gemini (default)
+uv run stt-benchmark ground-truth -p scribe        # ElevenLabs Scribe v2
 
 # Calculate semantic WER (Claude)
 uv run stt-benchmark wer
@@ -202,8 +205,13 @@ uv run stt-benchmark run --services deepgram --limit 50 --vad-stop-secs 0.3
 ### Generating Ground Truth
 
 ```bash
-# Generate ground truth for all samples
+# Generate ground truth using Gemini (default)
 uv run stt-benchmark ground-truth
+
+# Generate ground truth using ElevenLabs Scribe v2
+uv run stt-benchmark ground-truth -p scribe
+
+# Both providers can coexist — they are stored independently per model
 
 # Interactive review with audio playback
 uv run stt-benchmark ground-truth review <run_id>
@@ -217,6 +225,9 @@ uv run stt-benchmark wer
 
 # Force recalculate
 uv run stt-benchmark wer --services deepgram --force-recalculate
+
+# Evaluate against a specific ground truth model and store separately
+uv run stt-benchmark wer -s elevenlabs -m v2 --gt-model scribe_v2 --wer-label v2-scribe-gt
 ```
 
 ### Viewing Reports
@@ -251,7 +262,7 @@ stt_benchmark_data/
 |-------|-------------|
 | `samples` | Audio sample metadata |
 | `benchmark_results` | TTFS and transcription results |
-| `ground_truths` | Reference transcriptions (Gemini) |
+| `ground_truth` | Reference transcriptions (keyed by sample + model) |
 | `wer_metrics` | Semantic WER calculations |
 | `semantic_wer_traces` | Full Claude reasoning traces |
 
@@ -285,7 +296,7 @@ The benchmark dataset (audio samples and ground truth transcriptions) is publicl
 
 **[pipecat-ai/stt-benchmark-data](https://huggingface.co/datasets/pipecat-ai/stt-benchmark-data)**
 
-Audio samples are sourced from the `pipecat-ai/smart-turn-data-v3.1-train` dataset. Ground truth transcriptions are generated with Gemini and human-reviewed.
+Audio samples are sourced from the `pipecat-ai/smart-turn-data-v3.1-train` dataset. Ground truth transcriptions are generated via batch transcription using Gemini or ElevenLabs Scribe v2.
 
 ## Documentation
 

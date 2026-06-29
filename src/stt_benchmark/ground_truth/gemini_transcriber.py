@@ -183,9 +183,10 @@ class GeminiTranscriber:
             if progress_callback:
                 progress_callback(i, len(samples), sample.sample_id)
 
-            # Check if already transcribed (unless force is True)
             if not force:
-                existing = await self.db.get_ground_truth(sample.sample_id)
+                existing = await self.db.get_ground_truth(
+                    sample.sample_id, model_used=self.model_name
+                )
                 if existing:
                     logger.debug(f"Sample {sample.sample_id} already transcribed, skipping")
                     results.append(existing)

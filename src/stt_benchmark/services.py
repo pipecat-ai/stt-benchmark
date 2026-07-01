@@ -9,8 +9,8 @@ entry rather than editing the existing one in place — that keeps the old model
 published numbers reproducible and lets the benchmark show the before/after.
 A vendor's first/original entry keeps the bare vendor key (e.g. ``assemblyai``,
 ``cartesia``). Going forward, every NEW model uses a full ``vendor_model`` key
-derived from the model string (e.g. ``assemblyai_u3_rt_pro`` for model
-``u3-rt-pro``), so the key is unambiguous on its own. Older keys
+derived from the model string (e.g. ``assemblyai_universal-3-5-pro`` for model
+``universal-3-5-pro``), so the key is unambiguous on its own. Older keys
 (``cartesia_ink2``) are not renamed. Mark the superseded entry
 ``is_current=False``. Full checklist: docs/adding-models.md.
 
@@ -131,6 +131,22 @@ def create_assemblyai_u3_rt_pro() -> FrameProcessor:
         settings=AssemblyAISTTService.Settings(
             model="u3-rt-pro",
             end_of_turn_confidence_threshold=1.0,
+            min_turn_silence=50,
+            max_turn_silence=50,
+            vad_threshold=0.2,
+        ),
+        vad_force_turn_endpoint=True,
+    )
+
+
+# universal-3-5-pro: supersedes the u3-rt-pro entry above.
+def create_assemblyai_universal_3_5_pro() -> FrameProcessor:
+    from pipecat.services.assemblyai.stt import AssemblyAISTTService
+
+    return AssemblyAISTTService(
+        api_key=_get_env("ASSEMBLYAI_API_KEY"),
+        settings=AssemblyAISTTService.Settings(
+            model="universal-3-5-pro",
             min_turn_silence=50,
             max_turn_silence=50,
             vad_threshold=0.2,
@@ -474,6 +490,13 @@ STT_SERVICES: dict[str, ServiceDefinition] = {
         factory=create_assemblyai_u3_rt_pro,
         vendor="AssemblyAI",
         model_label="u3-rt-pro",
+        required_env_vars=["ASSEMBLYAI_API_KEY"],
+        is_current=False,  # superseded by assemblyai_universal_3_5_pro
+    ),
+    "assemblyai_universal_3_5_pro": ServiceDefinition(
+        factory=create_assemblyai_universal_3_5_pro,
+        vendor="AssemblyAI",
+        model_label="universal-3-5-pro",
         required_env_vars=["ASSEMBLYAI_API_KEY"],
     ),
     "aws": ServiceDefinition(

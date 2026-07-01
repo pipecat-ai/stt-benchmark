@@ -16,6 +16,7 @@ class ServiceName(str, Enum):
 
     ASSEMBLYAI = "assemblyai"
     ASSEMBLYAI_U3_RT_PRO = "assemblyai_u3_rt_pro"
+    ASSEMBLYAI_UNIVERSAL_3_5_PRO = "assemblyai_universal_3_5_pro"
     AWS = "aws"
     AZURE = "azure"
     CARTESIA = "cartesia"

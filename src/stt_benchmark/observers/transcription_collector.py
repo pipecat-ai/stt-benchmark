@@ -1,6 +1,7 @@
 """Observer for collecting transcription results from Pipecat pipeline."""
 
 import asyncio
+import time
 
 from loguru import logger
 from pipecat.frames.frames import TranscriptionFrame
@@ -26,6 +27,10 @@ class TranscriptionCollectorObserver(BaseObserver):
         # Event signaling that a final transcription was received
         self._transcription_received = asyncio.Event()
 
+        # Monotonic timestamp of the last final segment, so the transport can
+        # tell whether the service has gone quiet or is still delivering.
+        self._last_transcription_time: float = 0.0
+
     def set_current_sample(self, sample_id: str) -> None:
         """Set the current sample being processed.
 
@@ -34,6 +39,7 @@ class TranscriptionCollectorObserver(BaseObserver):
         """
         self._current_sample_id = sample_id
         self._transcription_received.clear()
+        self._last_transcription_time = 0.0
         # Clear any previous transcription for this sample (fresh start)
         if sample_id in self.transcriptions:
             del self.transcriptions[sample_id]
@@ -42,6 +48,7 @@ class TranscriptionCollectorObserver(BaseObserver):
         """Reset the observer state for a new sample."""
         self._current_sample_id = None
         self._transcription_received.clear()
+        self._last_transcription_time = 0.0
 
     async def on_push_frame(self, data: FramePushed) -> None:
         """Handle frame push events, capturing TranscriptionFrames only.
@@ -79,8 +86,14 @@ class TranscriptionCollectorObserver(BaseObserver):
             f"'{text}' (total: {len(self.transcriptions[self._current_sample_id])} chars)"
         )
 
+        self._last_transcription_time = time.monotonic()
+
         # Signal that transcription was received
         self._transcription_received.set()
+
+    def get_last_transcription_time(self) -> float:
+        """Monotonic timestamp of the most recent final segment, 0.0 if none yet."""
+        return self._last_transcription_time
 
     async def wait_for_transcription(self, timeout: float = 30.0) -> str | None:
         """Wait for a final transcription to be received.
@@ -114,3 +127,4 @@ class TranscriptionCollectorObserver(BaseObserver):
         self.transcriptions.clear()
         self._current_sample_id = None
         self._transcription_received.clear()
+        self._last_transcription_time = 0.0

@@ -1,7 +1,7 @@
 """Data models for STT benchmarking."""
 
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
@@ -11,7 +11,7 @@ def _utcnow() -> datetime:
     return datetime.now(UTC)
 
 
-class ServiceName(str, Enum):
+class ServiceName(StrEnum):
     """Supported STT services."""
 
     ASSEMBLYAI = "assemblyai"

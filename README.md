@@ -298,4 +298,4 @@ Audio samples are sourced from the `pipecat-ai/smart-turn-data-v3.1-train` datas
 
 ## License
 
-MIT
+BSD 2-Clause

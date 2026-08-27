@@ -6,7 +6,8 @@ build-backend = "hatchling.build"
 name = "stt-benchmark"
 version = "0.1.0"
 description = "STT (Speech-to-Text) TTFB benchmarking tool using Pipecat"
-license = "MIT"
+license = "BSD-2-Clause"
+license-files = ["LICENSE"]
 readme = "README.md"
 requires-python = ">=3.11"
 keywords = ["stt", "speech-to-text", "benchmark", "ttfb", "pipecat", "latency"]

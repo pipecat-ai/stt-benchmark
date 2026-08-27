@@ -10,7 +10,7 @@ Usage:
 import hashlib
 import json
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from loguru import logger
@@ -96,7 +96,7 @@ async def run_iteration(
         "prompt_hash": get_prompt_hash(TRANSCRIPTION_PROMPT),
         "prompt_text": TRANSCRIPTION_PROMPT,
         "num_samples": len(samples),
-        "started_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "started_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
     }
 
     with open(output_path, "w") as f:
@@ -133,7 +133,7 @@ async def run_iteration(
                     "duration_seconds": sample.duration_seconds,
                     "transcription": None,
                     "error": "Empty response from Gemini",
-                    "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                    "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
                 }
                 errors += 1
 
@@ -146,7 +146,7 @@ async def run_iteration(
                 "duration_seconds": sample.duration_seconds,
                 "transcription": None,
                 "error": str(e),
-                "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
             }
             errors += 1
 
@@ -158,7 +158,7 @@ async def run_iteration(
     footer = {
         "type": "footer",
         "run_id": run_id,
-        "completed_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "completed_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "total_samples": len(samples),
         "successful": completed,
         "errors": errors,

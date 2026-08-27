@@ -18,6 +18,7 @@ Benchmark results on 1000 samples from the `pipecat-ai/smart-turn-data-v3.1-trai
 | Cartesia | ink-whisper | 99.9% | 60.5% | 3.92% | 4.36% | 266ms | 364ms | 898ms |
 | Deepgram | nova-3-general | 99.8% | 76.5% | 1.71% | 1.62% | 247ms | 298ms | 326ms |
 | ElevenLabs | scribe_v2_realtime | 99.7% | 81.3% | 3.16% | 3.12% | 281ms | 348ms | 407ms |
+| Google | gemini-3.5-transcribe-live | 99.9% | 78.0% | 2.24% | 2.24% | 458ms | 532ms | 599ms |
 | Google | latest-long | 100.0% | 69.0% | 2.84% | 2.85% | 878ms | 1155ms | 1570ms |
 | Gradium | default | 99.8% | 65.1% | 3.56% | 3.71% | 570ms | 596ms | 622ms |
 | Mistral | voxtral-mini-transcribe-realtime-2602 | 99.3% | 68.8% | 4.44% | 4.97% | 525ms | 973ms | 1913ms |
@@ -297,4 +298,4 @@ Audio samples are sourced from the `pipecat-ai/smart-turn-data-v3.1-train` datas
 
 ## License
 
-MIT
+BSD 2-Clause

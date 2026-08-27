@@ -168,6 +168,7 @@ class BenchmarkRunner:
             sample_rate=self.sample_rate,
             chunk_ms=self.chunk_ms,
             transcription_received=transcription_observer._transcription_received,
+            get_last_transcription_time=transcription_observer.get_last_transcription_time,
             max_silence_timeout=self.max_silence_timeout_secs,
             post_transcription_delay=self.post_transcription_delay_secs,
         )
@@ -205,7 +206,7 @@ class BenchmarkRunner:
                 transcription = await transcription_observer.wait_for_transcription(
                     timeout=self.transcription_timeout_secs
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.warning(
                     f"[{service_name.value}] Transcription timeout after {self.transcription_timeout_secs}s"
                 )

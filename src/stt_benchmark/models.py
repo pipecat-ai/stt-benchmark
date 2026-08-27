@@ -1,17 +1,17 @@
 """Data models for STT benchmarking."""
 
-from datetime import datetime, timezone
-from enum import Enum
+from datetime import UTC, datetime
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
 
 def _utcnow() -> datetime:
     """Return current UTC datetime."""
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
-class ServiceName(str, Enum):
+class ServiceName(StrEnum):
     """Supported STT services."""
 
     ASSEMBLYAI = "assemblyai"
@@ -28,6 +28,7 @@ class ServiceName(str, Enum):
     FAL = "fal"
     GLADIA = "gladia"
     GOOGLE = "google"
+    GOOGLE_GEMINI_3_5_TRANSCRIBE_LIVE = "google_gemini_3_5_transcribe_live"
     GRADIUM = "gradium"
     GROQ = "groq"
     MISTRAL = "mistral"

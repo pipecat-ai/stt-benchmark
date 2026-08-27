@@ -6,6 +6,7 @@ bytes/files and pumps frames into a Pipecat Pipeline with real-time pacing.
 
 import asyncio
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 from loguru import logger
@@ -33,6 +34,7 @@ class SyntheticInputTransport(BaseInputTransport):
         sample_rate: int = 16000,
         chunk_ms: int = 20,
         transcription_received: asyncio.Event | None = None,
+        get_last_transcription_time: Callable[[], float] | None = None,
         max_silence_timeout: float = 10.0,
         post_transcription_delay: float = 2.0,
     ):
@@ -45,6 +47,8 @@ class SyntheticInputTransport(BaseInputTransport):
             transcription_received: Event set when transcription is received (optional).
                 If provided, silence is sent until this event is set or timeout.
                 If None, sends a fixed amount of silence for compatibility.
+            get_last_transcription_time: Callable returning the timestamp of the last
+                received transcription frame. Used to ensure all trailing segments drain.
             max_silence_timeout: Maximum time to send silence in seconds (default 10.0s)
             post_transcription_delay: Time to continue sending silence after first
                 transcription to collect additional segments (default 2.0s)
@@ -59,6 +63,7 @@ class SyntheticInputTransport(BaseInputTransport):
         self._sample_rate = sample_rate
         self._chunk_ms = chunk_ms
         self._transcription_received = transcription_received
+        self._get_last_transcription_time = get_last_transcription_time
         self._max_silence_timeout = max_silence_timeout
         self._post_transcription_delay = post_transcription_delay
 
@@ -83,6 +88,7 @@ class SyntheticInputTransport(BaseInputTransport):
         sample_rate: int = 16000,
         chunk_ms: int = 20,
         transcription_received: asyncio.Event | None = None,
+        get_last_transcription_time: Callable[[], float] | None = None,
         max_silence_timeout: float = 10.0,
         post_transcription_delay: float = 2.0,
     ) -> "SyntheticInputTransport":
@@ -93,6 +99,8 @@ class SyntheticInputTransport(BaseInputTransport):
             sample_rate: Audio sample rate in Hz
             chunk_ms: Duration of each audio chunk in ms
             transcription_received: Event set when transcription is received
+            get_last_transcription_time: Callable returning the timestamp of the last
+                received transcription frame.
             max_silence_timeout: Maximum time to send silence in seconds
             post_transcription_delay: Time to continue sending silence after first
                 transcription to collect additional segments
@@ -106,6 +114,7 @@ class SyntheticInputTransport(BaseInputTransport):
             sample_rate=sample_rate,
             chunk_ms=chunk_ms,
             transcription_received=transcription_received,
+            get_last_transcription_time=get_last_transcription_time,
             max_silence_timeout=max_silence_timeout,
             post_transcription_delay=post_transcription_delay,
         )
@@ -150,11 +159,11 @@ class SyntheticInputTransport(BaseInputTransport):
             # Send silence until transcription received or timeout
             if self._transcription_received is not None:
                 # Phase 1: Wait for first transcription
-                silence_start = time.time()
+                silence_start = time.monotonic()
                 silence_chunks_sent = 0
 
                 while not self._transcription_received.is_set():
-                    elapsed = time.time() - silence_start
+                    elapsed = time.monotonic() - silence_start
                     if elapsed >= self._max_silence_timeout:
                         logger.warning(
                             f"Max silence timeout ({self._max_silence_timeout}s) reached "
@@ -167,22 +176,46 @@ class SyntheticInputTransport(BaseInputTransport):
                 silence_duration = silence_chunks_sent * self._chunk_ms / 1000
                 if self._transcription_received.is_set():
                     logger.debug(
-                        f"First transcription received after {silence_duration:.2f}s of silence"
+                        f"First transcription confirmed (initial silence: {silence_duration:.2f}s)"
                     )
 
-                    # Phase 2: Continue sending silence for additional time to collect
-                    # remaining transcript segments (streaming STT sends multiple frames)
-                    post_start = time.time()
+                    # Phase 2: keep sending silence until the service has gone
+                    # quiet, rather than for a fixed span. It ends once
+                    # post_transcription_delay has passed both since this phase
+                    # began and since the last segment arrived, so a service
+                    # still delivering segments keeps the window open. The
+                    # max_silence_timeout below bounds the whole silence phase.
+                    post_start = time.monotonic()
                     post_chunks = 0
 
-                    while (time.time() - post_start) < self._post_transcription_delay:
+                    drain_capped = False
+                    while True:
+                        now = time.monotonic()
+                        last_tx = (
+                            self._get_last_transcription_time()
+                            if self._get_last_transcription_time
+                            else post_start
+                        )
+                        if (now - post_start) >= self._post_transcription_delay and (
+                            now - last_tx
+                        ) >= self._post_transcription_delay:
+                            break
+
+                        if (now - silence_start) >= self._max_silence_timeout:
+                            logger.warning(
+                                f"Max silence timeout ({self._max_silence_timeout}s) reached "
+                                f"while segments were still arriving; later ones are lost"
+                            )
+                            drain_capped = True
+                            break
+
                         await self._send_silence_chunk(silence_data, sleep_time)
                         post_chunks += 1
 
                     post_duration = post_chunks * self._chunk_ms / 1000
+                    ended = "cut off at the timeout" if drain_capped else "service went quiet"
                     logger.debug(
-                        f"Post-transcription silence complete ({post_duration:.2f}s) - "
-                        f"allowing additional transcript segments"
+                        f"Post-transcription silence complete ({post_duration:.2f}s) - {ended}"
                     )
                 else:
                     logger.debug(f"Silence phase ended after {silence_duration:.2f}s (timeout)")
@@ -230,7 +263,7 @@ class SyntheticInputTransport(BaseInputTransport):
         try:
             await asyncio.wait_for(self._audio_complete.wait(), timeout)
             return True
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return False
 
     @property

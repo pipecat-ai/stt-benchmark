@@ -1,7 +1,7 @@
 """SQLite storage for benchmark results."""
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import aiosqlite
@@ -505,7 +505,7 @@ class Database:
             (
                 new_text,
                 verified_by,
-                datetime.now(timezone.utc).isoformat(),
+                datetime.now(UTC).isoformat(),
                 original_text,
                 sample_id,
             ),

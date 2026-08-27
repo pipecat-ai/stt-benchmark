@@ -285,6 +285,18 @@ def create_google() -> FrameProcessor:
     )
 
 
+def create_google_gemini_3_5_transcribe_live() -> FrameProcessor:
+    from pipecat.services.google.stt import GeminiSTTService
+
+    return GeminiSTTService(
+        api_key=_get_env("GOOGLE_API_KEY"),
+        settings=GeminiSTTService.Settings(
+            model="gemini-3.5-transcribe-live",
+            languages=[Language.EN_US],
+        ),
+    )
+
+
 def create_gradium() -> FrameProcessor:
     from pipecat.services.gradium.stt import GradiumSTTService
 
@@ -585,6 +597,12 @@ STT_SERVICES: dict[str, ServiceDefinition] = {
         vendor="Google",
         model_label="latest-long",
         required_env_vars=["GOOGLE_APPLICATION_CREDENTIALS"],
+    ),
+    "google_gemini_3_5_transcribe_live": ServiceDefinition(
+        factory=create_google_gemini_3_5_transcribe_live,
+        vendor="Google",
+        model_label="gemini-3.5-transcribe-live",
+        required_env_vars=["GOOGLE_API_KEY"],
     ),
     "gradium": ServiceDefinition(
         factory=create_gradium,

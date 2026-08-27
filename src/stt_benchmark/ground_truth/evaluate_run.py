@@ -10,7 +10,7 @@ Usage:
 import json
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from stt_benchmark.config import get_config
@@ -55,7 +55,7 @@ def save_review(notes_path: Path, sample_id: str, status: str, note: str | None)
         "sample_id": sample_id,
         "status": status,
         "note": note,
-        "reviewed_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "reviewed_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
     }
     with open(notes_path, "a") as f:
         f.write(json.dumps(record) + "\n")
@@ -73,7 +73,7 @@ def save_edit(
         "sample_id": sample_id,
         "original_text": original_text,
         "corrected_text": corrected_text,
-        "edited_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "edited_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
     }
     with open(notes_path, "a") as f:
         f.write(json.dumps(record) + "\n")
@@ -165,7 +165,7 @@ def run_evaluation(run_path: Path):
             "type": "header",
             "run_id": run_id,
             "evaluator": "user",
-            "started_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "started_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         }
         with open(notes_path, "w") as f:
             f.write(json.dumps(header_record) + "\n")
@@ -297,7 +297,7 @@ def run_evaluation(run_path: Path):
         "edited": stats["edited"],
         "noted": stats["noted"],
         "skipped": stats["skipped"],
-        "completed_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "completed_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
     }
     with open(notes_path, "a") as f:
         f.write(json.dumps(summary) + "\n")

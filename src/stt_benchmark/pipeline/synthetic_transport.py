@@ -263,7 +263,7 @@ class SyntheticInputTransport(BaseInputTransport):
         try:
             await asyncio.wait_for(self._audio_complete.wait(), timeout)
             return True
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return False
 
     @property

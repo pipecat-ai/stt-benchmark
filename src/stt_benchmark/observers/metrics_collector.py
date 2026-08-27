@@ -105,7 +105,7 @@ class MetricsCollectorObserver(BaseObserver):
         try:
             await asyncio.wait_for(self._ttfb_received.wait(), timeout)
             return self._latest_ttfb
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning(f"Timeout waiting for TTFB metric after {timeout}s")
             return None
 

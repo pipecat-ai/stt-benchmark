@@ -17,7 +17,7 @@ import json
 import time
 import uuid
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import anthropic
@@ -788,7 +788,7 @@ Show your work clearly, then call calculate_wer with your verified counts."""
                     self.evaluate(reference, hypothesis, filename=filename),
                     timeout=timeout_secs,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.warning(
                     f"{filename}: timed out after {timeout_secs}s (attempt {attempt}/{max_retries})"
                 )
@@ -879,7 +879,7 @@ Show your work clearly, then call calculate_wer with your verified counts."""
                     errors=trace.errors,
                     normalized_reference=eval_result.get("normalized_reference"),
                     normalized_hypothesis=eval_result.get("normalized_hypothesis"),
-                    timestamp=datetime.now(timezone.utc),
+                    timestamp=datetime.now(UTC),
                 )
 
                 # Store metrics

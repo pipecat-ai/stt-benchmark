@@ -8,7 +8,7 @@ import io
 import time
 import wave
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from google import genai
@@ -151,7 +151,7 @@ class GeminiTranscriber:
                 sample_id=sample.sample_id,
                 text=transcription,
                 model_used=self.model_name,
-                generated_at=datetime.now(timezone.utc),
+                generated_at=datetime.now(UTC),
             )
 
         except Exception as e:

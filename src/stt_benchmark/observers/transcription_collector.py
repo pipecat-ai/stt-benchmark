@@ -107,7 +107,7 @@ class TranscriptionCollectorObserver(BaseObserver):
         try:
             await asyncio.wait_for(self._transcription_received.wait(), timeout)
             return self.transcriptions.get(self._current_sample_id)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning(f"Timeout waiting for transcription after {timeout}s")
             return None
 

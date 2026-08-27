@@ -40,8 +40,8 @@ dependencies = [
     "librosa",
     # Semantic WER evaluation (Claude)
     "anthropic>=0.76.0",
-    # Ground truth generation (Gemini)
-    "google-genai>=0.3.0",
+    # Ground truth generation (Gemini); >=2.9.0 required by GeminiSTTService
+    "google-genai>=2.9.0",
     # Interactive review (keyboard input)
     "readchar>=4.0.0",
     "adjusttext>=1.3.0",

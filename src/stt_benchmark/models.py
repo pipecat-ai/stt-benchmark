@@ -32,6 +32,7 @@ class ServiceName(StrEnum):
     GOOGLE_GEMINI_3_5_TRANSCRIBE_LIVE = "google_gemini_3_5_transcribe_live"
     GRADIUM = "gradium"
     GROQ = "groq"
+    META = "meta"
     MISTRAL = "mistral"
     NVIDIA = "nvidia"
     NVIDIA_SAGEMAKER = "nvidia_sagemaker"

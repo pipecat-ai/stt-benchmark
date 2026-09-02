@@ -339,6 +339,18 @@ def create_groq() -> FrameProcessor:
     )
 
 
+def create_meta() -> FrameProcessor:
+    from pipecat.services.meta.stt import MetaSTTService
+
+    return MetaSTTService(
+        api_key=_get_env("META_API_KEY"),
+        settings=MetaSTTService.Settings(
+            model="muse-voice-transcribe-1.0",
+            language=Language.EN,
+        ),
+    )
+
+
 def create_mistral() -> FrameProcessor:
     from pipecat.services.mistral.stt import MistralSTTService
 
@@ -639,6 +651,12 @@ STT_SERVICES: dict[str, ServiceDefinition] = {
         vendor="Groq",
         model_label="whisper-large-v3-turbo",
         required_env_vars=["GROQ_API_KEY"],
+    ),
+    "meta": ServiceDefinition(
+        factory=create_meta,
+        vendor="Meta",
+        model_label="muse-voice-transcribe-1.0",
+        required_env_vars=["META_API_KEY"],
     ),
     "mistral": ServiceDefinition(
         factory=create_mistral,

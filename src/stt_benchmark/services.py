@@ -156,6 +156,23 @@ def create_assemblyai_universal_3_5_pro() -> FrameProcessor:
     )
 
 
+# AssemblyAI's Sync API: one request/response per speech segment rather than a
+# streaming WebSocket, so it runs as a SegmentedSTTService off the pipeline's VAD.
+# It's the same universal-3-5-pro model as create_assemblyai_universal_3_5_pro()
+# over a different API, so it's a separate entry rather than a superseding one.
+def create_assemblyai_sync(aiohttp_session: "aiohttp.ClientSession") -> FrameProcessor:
+    from pipecat.services.assemblyai.stt import AssemblyAISyncSTTService
+
+    return AssemblyAISyncSTTService(
+        api_key=_get_env("ASSEMBLYAI_API_KEY"),
+        aiohttp_session=aiohttp_session,
+        settings=AssemblyAISyncSTTService.Settings(
+            model="universal-3-5-pro",
+            language=Language.EN,
+        ),
+    )
+
+
 def create_aws() -> FrameProcessor:
     from pipecat.services.aws.stt import AWSTranscribeSTTService
 
@@ -535,6 +552,13 @@ STT_SERVICES: dict[str, ServiceDefinition] = {
         vendor="AssemblyAI",
         model_label="universal-3-5-pro",
         required_env_vars=["ASSEMBLYAI_API_KEY"],
+    ),
+    "assemblyai_sync": ServiceDefinition(
+        factory=create_assemblyai_sync,
+        vendor="AssemblyAI",
+        model_label="universal-3-5-pro (sync)",
+        required_env_vars=["ASSEMBLYAI_API_KEY"],
+        needs_aiohttp=True,
     ),
     "aws": ServiceDefinition(
         factory=create_aws,

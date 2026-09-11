@@ -2829,7 +2829,7 @@ wheels = [
 
 [[package]]
 name = "pipecat-ai"
-version = "1.8.0"
+version = "1.9.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiofiles" },
@@ -2849,16 +2849,18 @@ dependencies = [
     { name = "pillow" },
     { name = "protobuf" },
     { name = "pydantic" },
+    { name = "python-dotenv" },
     { name = "pyyaml" },
     { name = "resampy" },
+    { name = "soundfile" },
     { name = "soxr" },
     { name = "typing-extensions" },
     { name = "wait-for2", marker = "python_full_version < '3.12'" },
     { name = "websockets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/81/5b/79484759132680b7de5d5461809724526d8fc976a8feef7da474c9aaec6b/pipecat_ai-1.8.0.tar.gz", hash = "sha256:abbb2aa9ce533bef57bc5635fda6c0abc8dc186cdfe8faacd6b740889100c169", size = 12012503, upload-time = "2026-08-26T23:33:55.961Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a0/66/07eeb9828559717736ac7a3398c2b419646d8d16ca1e8ab1cd230c488558/pipecat_ai-1.9.0.tar.gz", hash = "sha256:118050ebebc69368bf3d3ca6cea277d999afd4dcc31d59eca400433848d6eabd", size = 12179777, upload-time = "2026-09-11T03:05:15.85Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/2c/7b/7eda1cd230407552133c6a285f55a845820859fcf4cf5edb9c9c5c7e6f9a/pipecat_ai-1.8.0-py3-none-any.whl", hash = "sha256:c9820b4ee7180582a0caa13a2dc184433e85905683533eb26b338a275ad6caa0", size = 11508218, upload-time = "2026-08-26T23:33:52.805Z" },
+    { url = "https://files.pythonhosted.org/packages/75/56/bbe4a0f6388ba826430c317ed220e1a3d90e4b60dee3b36cce341f146c00/pipecat_ai-1.9.0-py3-none-any.whl", hash = "sha256:5b3d952c50b70c1ace3aace87493009a4460ae3cfc6225af5807953008884ac5", size = 11668155, upload-time = "2026-09-11T03:05:13.27Z" },
 ]
 
 [package.optional-dependencies]
@@ -2891,9 +2893,6 @@ sagemaker = [
 ]
 sarvam = [
     { name = "sarvamai" },
-]
-soundfile = [
-    { name = "soundfile" },
 ]
 speechmatics = [
     { name = "speechmatics-voice", extra = ["smart"] },
@@ -4014,7 +4013,7 @@ dependencies = [
     { name = "loguru" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "numpy", version = "2.5.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
-    { name = "pipecat-ai", extra = ["aws", "azure", "deepgram", "google", "groq", "mistral", "nvidia", "sagemaker", "sarvam", "soundfile", "speechmatics", "whisper"] },
+    { name = "pipecat-ai", extra = ["aws", "azure", "deepgram", "google", "groq", "mistral", "nvidia", "sagemaker", "sarvam", "speechmatics", "whisper"] },
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "readchar" },
@@ -4048,7 +4047,7 @@ requires-dist = [
     { name = "loguru", specifier = ">=0.7.0" },
     { name = "matplotlib", marker = "extra == 'viz'", specifier = ">=3.8.0" },
     { name = "numpy", specifier = ">=1.26.0" },
-    { name = "pipecat-ai", extras = ["assemblyai", "aws", "azure", "cartesia", "deepgram", "elevenlabs", "fal", "gladia", "google", "gradium", "groq", "mistral", "nvidia", "openai", "sagemaker", "sarvam", "smallest", "soniox", "speechmatics", "whisper", "silero", "soundfile", "xai"], specifier = ">=1.8.0,<2" },
+    { name = "pipecat-ai", extras = ["assemblyai", "aws", "azure", "cartesia", "deepgram", "elevenlabs", "fal", "gladia", "google", "gradium", "groq", "mistral", "nvidia", "openai", "sagemaker", "sarvam", "smallest", "soniox", "speechmatics", "whisper", "silero", "soundfile", "xai"], specifier = ">=1.9.0,<2" },
     { name = "pydantic", specifier = ">=2.0.0" },
     { name = "pydantic-settings", specifier = ">=2.0.0" },
     { name = "readchar", specifier = ">=4.0.0" },

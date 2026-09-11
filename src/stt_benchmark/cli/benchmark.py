@@ -52,11 +52,12 @@ def run_benchmark(
         "--skip-existing/--no-skip-existing",
         help="Skip samples that already have results",
     ),
-    vad_stop_secs: float = typer.Option(
-        0.2,
+    vad_stop_secs: float | None = typer.Option(
+        None,
         "--vad-stop-secs",
         "-v",
-        help="VAD silence duration to trigger stop (seconds)",
+        help="VAD silence duration to trigger stop (seconds). Overrides any per-service "
+        "value; omit to let each service use its own (default 0.2)",
     ),
     test: bool = typer.Option(
         False,
@@ -88,7 +89,7 @@ def run_benchmark(
     if limit:
         console.print(f"Sample limit: {limit}")
     console.print(f"Skip existing: {skip_existing}")
-    console.print(f"VAD stop secs: {vad_stop_secs}")
+    console.print(f"VAD stop secs: {vad_stop_secs if vad_stop_secs is not None else 'per-service'}")
     if test:
         console.print("[yellow]Test mode: using separate test database[/yellow]")
 

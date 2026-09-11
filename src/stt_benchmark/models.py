@@ -23,7 +23,7 @@ class ServiceName(StrEnum):
     CARTESIA = "cartesia"
     CARTESIA_INK2 = "cartesia_ink2"
     DEEPGRAM = "deepgram"
-    # DEEPGRAM_FLUX = "deepgram_flux"
+    DEEPGRAM_FLUX_GENERAL_EN = "deepgram_flux_general_en"
     ELEVENLABS = "elevenlabs"
     ELEVENLABS_HTTP = "elevenlabs_http"
     FAL = "fal"

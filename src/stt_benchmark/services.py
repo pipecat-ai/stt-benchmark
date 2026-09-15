@@ -502,12 +502,29 @@ def create_soniox_stt_rt_v5() -> FrameProcessor:
     )
 
 
+# Legacy real-time endpoint (/v2), driven by Pipecat's VAD. Benchmarked on
+# pipecat-ai <1.10; since 1.10.0 SpeechmaticsSTTService only speaks to the
+# Agent STT endpoint, so this entry no longer connects. Kept for the record.
 def create_speechmatics() -> FrameProcessor:
     from pipecat.services.speechmatics.stt import SpeechmaticsSTTService, TurnDetectionMode
 
     return SpeechmaticsSTTService(
         api_key=_get_env("SPEECHMATICS_API_KEY"),
         base_url=os.getenv("SPEECHMATICS_RT_URL", "wss://us.rt.speechmatics.com/v2"),
+        settings=SpeechmaticsSTTService.Settings(
+            language=Language.EN,
+            turn_detection_mode=TurnDetectionMode.EXTERNAL,
+        ),
+    )
+
+
+# Speechmatics Agent STT (/v2/agent, model linden-1): supersedes the legacy entry above.
+def create_speechmatics_agent_stt() -> FrameProcessor:
+    from pipecat.services.speechmatics.stt import SpeechmaticsSTTService, TurnDetectionMode
+
+    return SpeechmaticsSTTService(
+        api_key=_get_env("SPEECHMATICS_API_KEY"),
+        base_url=os.getenv("SPEECHMATICS_RT_URL", "wss://us.rt.speechmatics.com/v2/agent"),
         settings=SpeechmaticsSTTService.Settings(
             language=Language.EN,
             turn_detection_mode=TurnDetectionMode.EXTERNAL,
@@ -736,6 +753,13 @@ STT_SERVICES: dict[str, ServiceDefinition] = {
         factory=create_speechmatics,
         vendor="Speechmatics",
         model_label="N/A",
+        required_env_vars=["SPEECHMATICS_API_KEY"],
+        is_current=False,  # superseded by speechmatics_agent_stt
+    ),
+    "speechmatics_agent_stt": ServiceDefinition(
+        factory=create_speechmatics_agent_stt,
+        vendor="Speechmatics",
+        model_label="linden-1",
         required_env_vars=["SPEECHMATICS_API_KEY"],
     ),
     "whisper": ServiceDefinition(

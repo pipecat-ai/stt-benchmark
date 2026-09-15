@@ -30,6 +30,7 @@ Benchmark results on 1000 samples from the `pipecat-ai/smart-turn-data-v3.1-trai
 | Smallest AI | pulse | 100.0% | 72.4% | 2.30% | 2.37% | 398ms | 533ms | 1593ms |
 | Soniox | stt-rt-v5 | 99.8% | 83.3% | 1.34% | 1.27% | 260ms | 305ms | 313ms |
 | Soniox | stt-rt-v4 | 99.8% | 84.1% | 1.25% | 1.29% | 249ms | 281ms | 310ms |
+| Speechmatics | linden-1 | 99.5% | 84.5% | 1.21% | 1.05% | 369ms | 438ms | 690ms |
 | Speechmatics | N/A | 99.7% | 83.2% | 1.40% | 1.07% | 495ms | 676ms | 736ms |
 <!-- RESULTS_TABLE:END -->
 

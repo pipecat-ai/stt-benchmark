@@ -44,6 +44,7 @@ class ServiceName(StrEnum):
     SARVAM_SAARAS_V3 = "sarvam_saaras_v3"
     SMALLEST = "smallest"
     SPEECHMATICS = "speechmatics"
+    SPEECHMATICS_AGENT_STT = "speechmatics_agent_stt"
     SONIOX = "soniox"
     SONIOX_STT_RT_V5 = "soniox_stt_rt_v5"
     WHISPER = "whisper"

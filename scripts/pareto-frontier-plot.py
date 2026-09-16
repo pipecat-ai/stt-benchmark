@@ -45,10 +45,12 @@ DEFAULT_LABEL_OFFSETS = {
         "Deepgram": (8, 2, "left"),
         "Soniox stt-rt-v4": (-9, 4, "right"),
         "Soniox stt-rt-v5": (-9, -12, "right"),
-        "AssemblyAI universal-3-5-pro": (2, -20, "left"),
+        "AssemblyAI universal-3-5-pro": (8, 19, "left"),
         "Cartesia ink-2": (8, -3, "left"),
-        "AssemblyAI u3-rt-pro": (8, 2, "left"),
+        "AssemblyAI u3-rt-pro": (10, -1, "left"),
         "Speechmatics": (10, -2, "left"),
+        "Speechmatics linden-1": (-9, -12, "right"),
+        "Meta": (10, -4, "left"),
     },
 }
 

@@ -156,6 +156,23 @@ def create_assemblyai_universal_3_5_pro() -> FrameProcessor:
     )
 
 
+# universal-3-6-pro: supersedes the universal-3-5-pro entry above.
+def create_assemblyai_universal_3_6_pro() -> FrameProcessor:
+    from pipecat.services.assemblyai.stt import AssemblyAISTTService
+
+    return AssemblyAISTTService(
+        api_key=_get_env("ASSEMBLYAI_API_KEY"),
+        settings=AssemblyAISTTService.Settings(
+            model="universal-3-6-pro",
+            min_turn_silence=50,
+            max_turn_silence=50,
+            vad_threshold=0.2,
+            prompt="Transcribe this in English.",
+        ),
+        vad_force_turn_endpoint=True,
+    )
+
+
 # AssemblyAI's Sync API: one request/response per speech segment rather than a
 # streaming WebSocket, so it runs as a SegmentedSTTService off the pipeline's VAD.
 # It's the same universal-3-5-pro model as create_assemblyai_universal_3_5_pro()
@@ -580,6 +597,13 @@ STT_SERVICES: dict[str, ServiceDefinition] = {
         factory=create_assemblyai_universal_3_5_pro,
         vendor="AssemblyAI",
         model_label="universal-3-5-pro",
+        required_env_vars=["ASSEMBLYAI_API_KEY"],
+        is_current=False,  # superseded by assemblyai_universal_3_6_pro
+    ),
+    "assemblyai_universal_3_6_pro": ServiceDefinition(
+        factory=create_assemblyai_universal_3_6_pro,
+        vendor="AssemblyAI",
+        model_label="universal-3-6-pro",
         required_env_vars=["ASSEMBLYAI_API_KEY"],
     ),
     "assemblyai_sync": ServiceDefinition(

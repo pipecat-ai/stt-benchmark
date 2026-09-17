@@ -49,7 +49,8 @@ DEFAULT_LABEL_OFFSETS = {
         "Cartesia ink-2": (8, -3, "left"),
         "AssemblyAI u3-rt-pro": (10, -1, "left"),
         "Speechmatics": (10, -2, "left"),
-        "Speechmatics linden-1": (-9, -12, "right"),
+        "Speechmatics linden-1": (10, -9, "left"),
+        "AssemblyAI universal-3-6-pro": (-10, -12, "right"),
         "Meta": (10, -4, "left"),
     },
 }

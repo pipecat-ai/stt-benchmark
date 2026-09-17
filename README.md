@@ -9,8 +9,9 @@ Benchmark results on 1000 samples from the `pipecat-ai/smart-turn-data-v3.1-trai
 <!-- RESULTS_TABLE:START -->
 | Vendor | Model | Transcripts | Perfect | WER Mean | Pooled WER | TTFS Median | TTFS P95 | TTFS P99 |
 |--------|-------|-------------|---------|----------|------------|-------------|----------|----------|
-| AssemblyAI | universal-3-5-pro | 99.9% | 84.7% | 1.44% | 1.22% | 282ms | 354ms | 393ms |
+| AssemblyAI | universal-3-6-pro | 99.9% | 87.0% | 1.06% | 0.96% | 307ms | 401ms | 498ms |
 | AssemblyAI | u3-rt-pro | 99.8% | 83.9% | 1.74% | 1.34% | 335ms | 534ms | 613ms |
+| AssemblyAI | universal-3-5-pro | 99.9% | 84.7% | 1.44% | 1.22% | 282ms | 354ms | 393ms |
 | AssemblyAI | universal-streaming-english | 99.8% | 66.8% | 3.49% | 3.02% | 256ms | 362ms | 417ms |
 | AWS | N/A | 100.0% | 77.4% | 1.68% | 1.75% | 1136ms | 1527ms | 1897ms |
 | Azure | N/A | 100.0% | 82.9% | 1.21% | 1.18% | 1016ms | 1345ms | 1791ms |

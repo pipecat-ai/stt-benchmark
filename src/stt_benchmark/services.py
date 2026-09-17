@@ -466,13 +466,13 @@ def create_sarvam() -> FrameProcessor:
     )
 
 
-def create_sarvam_saaras_v3() -> FrameProcessor:
+def create_sarvam_saaras_v4() -> FrameProcessor:
     from pipecat.services.sarvam.stt import SarvamSTTService
 
     return SarvamSTTService(
         api_key=_get_env("SARVAM_API_KEY"),
         settings=SarvamSTTService.Settings(
-            model="saaras:v3",
+            model="saaras:v4",
         ),
     )
 
@@ -745,12 +745,12 @@ STT_SERVICES: dict[str, ServiceDefinition] = {
         vendor="Sarvam",
         model_label="saarika:v2.5",
         required_env_vars=["SARVAM_API_KEY"],
-        is_current=False,  # superseded by sarvam_saaras_v3
+        is_current=False,  # superseded by sarvam_saaras_v4
     ),
-    "sarvam_saaras_v3": ServiceDefinition(
-        factory=create_sarvam_saaras_v3,
+    "sarvam_saaras_v4": ServiceDefinition(
+        factory=create_sarvam_saaras_v4,
         vendor="Sarvam",
-        model_label="saaras:v3",
+        model_label="saaras:v4",
         required_env_vars=["SARVAM_API_KEY"],
     ),
     "smallest": ServiceDefinition(

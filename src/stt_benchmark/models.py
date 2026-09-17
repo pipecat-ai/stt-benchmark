@@ -42,7 +42,7 @@ class ServiceName(StrEnum):
     OPENAI_GPT_REALTIME_WHISPER = "openai_gpt_realtime_whisper"
     OPENAI_REALTIME = "openai_realtime"
     SARVAM = "sarvam"
-    SARVAM_SAARAS_V3 = "sarvam_saaras_v3"
+    SARVAM_SAARAS_V4 = "sarvam_saaras_v4"
     SMALLEST = "smallest"
     SPEECHMATICS = "speechmatics"
     SPEECHMATICS_AGENT_STT = "speechmatics_agent_stt"

@@ -47,7 +47,6 @@ DEFAULT_LABEL_OFFSETS = {
         "Soniox stt-rt-v5": (-9, -12, "right"),
         "AssemblyAI universal-3-5-pro": (8, 19, "left"),
         "Cartesia ink-2": (8, -3, "left"),
-        "AssemblyAI u3-rt-pro": (10, -1, "left"),
         "Speechmatics": (10, -2, "left"),
         "Speechmatics linden-1": (10, -9, "left"),
         "AssemblyAI universal-3-6-pro": (-10, -12, "right"),

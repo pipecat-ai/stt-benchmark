@@ -10,7 +10,6 @@ Benchmark results on 1000 samples from the `pipecat-ai/smart-turn-data-v3.1-trai
 | Vendor | Model | Transcripts | Perfect | WER Mean | Pooled WER | TTFS Median | TTFS P95 | TTFS P99 |
 |--------|-------|-------------|---------|----------|------------|-------------|----------|----------|
 | AssemblyAI | universal-3-6-pro | 99.9% | 87.0% | 1.06% | 0.96% | 307ms | 401ms | 498ms |
-| AssemblyAI | u3-rt-pro | 99.8% | 83.9% | 1.74% | 1.34% | 335ms | 534ms | 613ms |
 | AssemblyAI | universal-3-5-pro | 99.9% | 84.7% | 1.44% | 1.22% | 282ms | 354ms | 393ms |
 | AssemblyAI | universal-streaming-english | 99.8% | 66.8% | 3.49% | 3.02% | 256ms | 362ms | 417ms |
 | AWS | N/A | 100.0% | 77.4% | 1.68% | 1.75% | 1136ms | 1527ms | 1897ms |
@@ -188,7 +187,7 @@ This gives accuracy metrics that reflect real-world impact on downstream LLM app
 
 ## Supported Services
 
-Each service key is one (vendor, model) pair — a vendor with multiple models has multiple keys (e.g. `cartesia` / `cartesia_ink2`, `assemblyai` / `assemblyai_u3_rt_pro`). The full list is defined in [`src/stt_benchmark/services.py`](src/stt_benchmark/services.py) (`STT_SERVICES`). To add a model, see [docs/adding-models.md](docs/adding-models.md). See `env.example` for required API keys.
+Each service key is one (vendor, model) pair — a vendor with multiple models has multiple keys (e.g. `cartesia` / `cartesia_ink2`, `assemblyai` / `assemblyai_universal_3_6_pro`). The full list is defined in [`src/stt_benchmark/services.py`](src/stt_benchmark/services.py) (`STT_SERVICES`). To add a model, see [docs/adding-models.md](docs/adding-models.md). See `env.example` for required API keys.
 
 ## CLI Commands
 

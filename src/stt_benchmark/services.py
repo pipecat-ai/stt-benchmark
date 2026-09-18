@@ -123,23 +123,7 @@ def create_assemblyai() -> FrameProcessor:
     )
 
 
-def create_assemblyai_u3_rt_pro() -> FrameProcessor:
-    from pipecat.services.assemblyai.stt import AssemblyAISTTService
-
-    return AssemblyAISTTService(
-        api_key=_get_env("ASSEMBLYAI_API_KEY"),
-        settings=AssemblyAISTTService.Settings(
-            model="u3-rt-pro",
-            end_of_turn_confidence_threshold=1.0,
-            min_turn_silence=50,
-            max_turn_silence=50,
-            vad_threshold=0.2,
-        ),
-        vad_force_turn_endpoint=True,
-    )
-
-
-# universal-3-5-pro: supersedes the u3-rt-pro entry above.
+# universal-3-5-pro: supersedes the universal-streaming-english entry above.
 def create_assemblyai_universal_3_5_pro() -> FrameProcessor:
     from pipecat.services.assemblyai.stt import AssemblyAISTTService
 
@@ -582,13 +566,6 @@ STT_SERVICES: dict[str, ServiceDefinition] = {
         factory=create_assemblyai,
         vendor="AssemblyAI",
         model_label="universal-streaming-english",
-        required_env_vars=["ASSEMBLYAI_API_KEY"],
-        is_current=False,  # superseded by assemblyai_u3_rt_pro
-    ),
-    "assemblyai_u3_rt_pro": ServiceDefinition(
-        factory=create_assemblyai_u3_rt_pro,
-        vendor="AssemblyAI",
-        model_label="u3-rt-pro",
         required_env_vars=["ASSEMBLYAI_API_KEY"],
         is_current=False,  # superseded by assemblyai_universal_3_5_pro
     ),

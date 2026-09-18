@@ -15,7 +15,6 @@ class ServiceName(StrEnum):
     """Supported STT services."""
 
     ASSEMBLYAI = "assemblyai"
-    ASSEMBLYAI_U3_RT_PRO = "assemblyai_u3_rt_pro"
     ASSEMBLYAI_UNIVERSAL_3_5_PRO = "assemblyai_universal_3_5_pro"
     ASSEMBLYAI_UNIVERSAL_3_6_PRO = "assemblyai_universal_3_6_pro"
     ASSEMBLYAI_SYNC = "assemblyai_sync"

@@ -3,7 +3,7 @@
 This benchmark treats **one (vendor, model) pair as one "service" entry**. A vendor
 with several models has one entry per model — for example `cartesia` (Ink-Whisper)
 and `cartesia_ink2` (Ink-2), or `assemblyai` (Universal-Streaming) and
-`assemblyai_u3_rt_pro` (Universal-3 RT Pro).
+`assemblyai_universal_3_6_pro` (Universal-3.6 Pro).
 
 ## Why we keep old models instead of overwriting
 
@@ -23,9 +23,9 @@ survives and you can't tell which model produced it.
 - The vendor's **first/original** model keeps the bare vendor key: `cartesia`,
   `assemblyai`. These are never renamed.
 - Every **new** model (going forward) uses a full `vendor_model` key derived from
-  the model string, so the key is unambiguous on its own — e.g. model `u3-rt-pro`
-  → `assemblyai_u3_rt_pro`. Replace characters that aren't valid in identifiers
-  (`-`, `.`, `:`) with `_`.
+  the model string, so the key is unambiguous on its own — e.g. model
+  `universal-3-6-pro` → `assemblyai_universal_3_6_pro`. Replace characters that
+  aren't valid in identifiers (`-`, `.`, `:`) with `_`.
 - Existing shorter keys from before this convention (e.g. `cartesia_ink2`) are
   left as-is rather than backdated.
 - Mark the superseded entry `is_current=False`. The newest stays `is_current=True`
@@ -37,8 +37,9 @@ survives and you can't tell which model produced it.
 string — not a marketing name. Pick it in this order:
 
 1. **The factory pins a model string** → use that string verbatim: Deepgram
-   `nova-3-general`, Cartesia `ink-2`, AssemblyAI `u3-rt-pro`. This keeps the
-   label reproducible and unambiguous (it's the value you'd pass to re-run it).
+   `nova-3-general`, Cartesia `ink-2`, AssemblyAI `universal-3-6-pro`. This
+   keeps the label reproducible and unambiguous (it's the value you'd pass to
+   re-run it).
 2. **The vendor exposes no selectable model** (AWS, Azure, fal, Speechmatics, …)
    → use `N/A`. These vendors serve one engine with no model string to pin; you'd
    only add a second entry once they ship a *named/versioned* model (e.g.
@@ -53,27 +54,28 @@ The label's job is the generated README Model column and in-code self-descriptio
 ## Checklist: add a new model for an existing vendor
 
 1. **`src/stt_benchmark/services.py`** — add a factory function returning the
-   configured service, e.g. `create_assemblyai_u3_rt_pro()`. Add a short comment noting
-   which model it is and that it supersedes the previous one.
+   configured service, e.g. `create_assemblyai_universal_3_6_pro()`. Add a short
+   comment noting which model it is and that it supersedes the previous one.
 2. **`src/stt_benchmark/services.py`** — add an entry to `STT_SERVICES` with
    `vendor`, `model_label`, `required_env_vars`, and `is_current`. Set the
    *previous* model's entry to `is_current=False`.
 3. **`src/stt_benchmark/models.py`** — add a `ServiceName` enum value matching the
-   new registry key (e.g. `ASSEMBLYAI_U3_RT_PRO = "assemblyai_u3_rt_pro"`).
+   new registry key
+   (e.g. `ASSEMBLYAI_UNIVERSAL_3_6_PRO = "assemblyai_universal_3_6_pro"`).
 4. **`README.md`** — nothing to hand-edit. Do **not** hand-type the Results Summary row
    — step 6 writes it from your benchmark database between the `RESULTS_TABLE` markers.
 5. **Run the benchmark** for the new entry:
    ```bash
-   uv run stt-benchmark run --services assemblyai_u3_rt_pro
+   uv run stt-benchmark run --services assemblyai_universal_3_6_pro
    uv run stt-benchmark ground-truth   # if not already generated for these samples
-   uv run stt-benchmark wer --services assemblyai_u3_rt_pro
+   uv run stt-benchmark wer --services assemblyai_universal_3_6_pro
    ```
 6. **Add your row to the README table** — a *targeted* upsert that reads only this
    service's metrics from your local database and inserts/replaces just its row,
    leaving every other vendor's row untouched (Vendor/Model and number formatting
    come from the registry):
    ```bash
-   uv run stt-benchmark update-readme --services assemblyai_u3_rt_pro
+   uv run stt-benchmark update-readme --services assemblyai_universal_3_6_pro
    ```
 7. **Regenerate the plots from the README** — the README table is the single
    source of truth; this reads it and never rewrites it:

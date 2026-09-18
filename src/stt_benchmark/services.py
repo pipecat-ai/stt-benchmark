@@ -95,6 +95,14 @@ class ServiceDefinition:
     # context and pass it as the first argument to the factory.
     needs_aiohttp: bool = False
 
+    # Silence duration (seconds) for the VAD stop event, when this service needs a
+    # different threshold than the shared default. Services whose finalization is
+    # driven by the VAD signal (rather than the vendor's own endpointing) are
+    # sensitive to this: too low and the VAD fires on mid-utterance pauses, cutting
+    # the utterance into several finalized segments. None uses the shared default.
+    # An explicit --vad-stop-secs overrides this.
+    vad_stop_secs: float | None = None
+
     # False when a newer model entry from the same vendor supersedes this one.
     # Superseded models stay runnable (for reproducibility) but are not the
     # vendor's headline/recommended model.
@@ -226,6 +234,19 @@ def create_deepgram() -> FrameProcessor:
             smart_format=False,
             profanity_filter=False,
             language=Language.EN,
+        ),
+    )
+
+
+def create_deepgram_flux_general_en() -> FrameProcessor:
+    from pipecat.services.deepgram.flux.stt import DeepgramFluxSTTService, FluxTurnDetection
+
+    return DeepgramFluxSTTService(
+        api_key=_get_env("DEEPGRAM_API_KEY"),
+        turn_detection=FluxTurnDetection.MANUAL,
+        settings=DeepgramFluxSTTService.Settings(
+            model="flux-general-en",
+            eot_threshold=1.0,
         ),
     )
 
@@ -618,6 +639,12 @@ STT_SERVICES: dict[str, ServiceDefinition] = {
         factory=create_deepgram,
         vendor="Deepgram",
         model_label="nova-3-general",
+        required_env_vars=["DEEPGRAM_API_KEY"],
+    ),
+    "deepgram_flux_general_en": ServiceDefinition(
+        factory=create_deepgram_flux_general_en,
+        vendor="Deepgram",
+        model_label="flux-general-en",
         required_env_vars=["DEEPGRAM_API_KEY"],
     ),
     "elevenlabs": ServiceDefinition(

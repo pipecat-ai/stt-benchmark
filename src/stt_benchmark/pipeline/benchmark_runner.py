@@ -33,7 +33,7 @@ class BenchmarkRunner:
         self,
         sample_rate: int = 16000,
         chunk_ms: int = 20,
-        vad_stop_secs: float = 0.2,
+        vad_stop_secs: float | None = None,
         max_silence_timeout_secs: float = 10.0,
         transcription_timeout_secs: float = 10.0,
         post_transcription_delay_secs: float = 2.0,
@@ -43,7 +43,10 @@ class BenchmarkRunner:
         Args:
             sample_rate: Audio sample rate in Hz.
             chunk_ms: Duration of each audio chunk in ms.
-            vad_stop_secs: Silence duration for VAD stop.
+            vad_stop_secs: Silence duration for VAD stop. When given, it overrides any
+                per-service value (see ``ServiceDefinition.vad_stop_secs``), so a sweep
+                can hold every service to the same threshold. When None, each service
+                uses its own pinned value, falling back to the shared default.
             max_silence_timeout_secs: Max time to send silence while waiting for transcription.
             transcription_timeout_secs: Max time to wait for transcription after silence ends.
             post_transcription_delay_secs: Time to continue sending silence after first
@@ -52,7 +55,8 @@ class BenchmarkRunner:
         config = get_config()
         self.sample_rate = sample_rate or config.sample_rate
         self.chunk_ms = chunk_ms or config.chunk_duration_ms
-        self.vad_stop_secs = vad_stop_secs or config.vad_stop_secs
+        self._vad_stop_secs_override = vad_stop_secs
+        self.vad_stop_secs = config.vad_stop_secs
         self.max_silence_timeout_secs = max_silence_timeout_secs or config.max_silence_timeout_secs
         self.transcription_timeout_secs = (
             transcription_timeout_secs or config.transcription_timeout_secs
@@ -173,8 +177,11 @@ class BenchmarkRunner:
             post_transcription_delay=self.post_transcription_delay_secs,
         )
 
+        stop_secs = self.resolve_vad_stop_secs(service_name)
+        if stop_secs != self.vad_stop_secs:
+            logger.debug(f"[{service_name.value}] VAD stop_secs={stop_secs}")
         vad_processor = VADProcessor(
-            vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=self.vad_stop_secs))
+            vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=stop_secs))
         )
 
         # Build pipeline
@@ -256,6 +263,26 @@ class BenchmarkRunner:
             transcription=transcription,
             audio_duration_seconds=sample.duration_seconds,
         )
+
+    def resolve_vad_stop_secs(self, service_name: ServiceName) -> float:
+        """Resolve the VAD stop threshold to use for a service.
+
+        An explicit ``vad_stop_secs`` passed to the runner always wins, so
+        ``--vad-stop-secs`` can hold every service to one threshold for a sweep.
+        Otherwise a service may pin its own (services whose finalization is driven
+        by the VAD signal need a different threshold than the shared default), and
+        anything else falls back to that default.
+
+        Args:
+            service_name: The service about to be benchmarked.
+
+        Returns:
+            The VAD stop threshold in seconds.
+        """
+        if self._vad_stop_secs_override is not None:
+            return self._vad_stop_secs_override
+        pinned = get_service_definition(service_name.value).vad_stop_secs
+        return pinned if pinned is not None else self.vad_stop_secs
 
     async def benchmark_batch(
         self,

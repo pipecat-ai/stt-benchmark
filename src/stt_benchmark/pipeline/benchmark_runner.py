@@ -1,6 +1,7 @@
 """Benchmark runner for STT services using Pipecat pipeline."""
 
 import asyncio
+import gc
 from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -95,6 +96,13 @@ class BenchmarkRunner:
         metrics_observer.set_current_sample(sample.sample_id)
         transcription_observer.set_current_sample(sample.sample_id)
 
+        # Keep client GC pauses out of latency measurements. Samples run
+        # sequentially, so collect between them and restore GC after teardown.
+        gc_was_enabled = gc.isenabled()
+        if gc_was_enabled:
+            gc.collect()
+            gc.disable()
+
         try:
             # Check if this service needs an aiohttp session
             definition = get_service_definition(service_name.value)
@@ -131,6 +139,9 @@ class BenchmarkRunner:
                 audio_duration_seconds=sample.duration_seconds,
                 error=str(e),
             )
+        finally:
+            if gc_was_enabled:
+                gc.enable()
 
     async def _run_pipeline(
         self,

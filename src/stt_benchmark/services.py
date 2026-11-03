@@ -439,6 +439,23 @@ def create_openai_gpt_realtime_whisper() -> FrameProcessor:
     )
 
 
+# Saidwire's own Pipecat service, from the pipecat-saidwire package on PyPI. It sends
+# Finalize when the pipeline's VAD reports the user stopped speaking, and the final
+# transcript comes back in answer to it. The API serves one English model, saidwire-en;
+# each result's metadata.model_info.version names the dated version that answered.
+def create_saidwire() -> FrameProcessor:
+    from pipecat_saidwire import SaidwireSTTService
+
+    return SaidwireSTTService(
+        api_key=_get_env("SAIDWIRE_API_KEY"),
+        settings=SaidwireSTTService.Settings(
+            model="saidwire-en",
+            language=Language.EN,
+        ),
+        vad_force_finalize=True,
+    )
+
+
 def create_sarvam() -> FrameProcessor:
     from pipecat.services.sarvam.stt import SarvamSTTService
 
@@ -717,6 +734,12 @@ STT_SERVICES: dict[str, ServiceDefinition] = {
         vendor="OpenAI",
         model_label="gpt-4o-transcribe",
         required_env_vars=["OPENAI_API_KEY"],
+    ),
+    "saidwire": ServiceDefinition(
+        factory=create_saidwire,
+        vendor="Saidwire",
+        model_label="saidwire-en",
+        required_env_vars=["SAIDWIRE_API_KEY"],
     ),
     "sarvam": ServiceDefinition(
         factory=create_sarvam,

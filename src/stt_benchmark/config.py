@@ -43,6 +43,7 @@ class BenchmarkConfig(BaseSettings):
     nvidia_api_key: str = Field(default="", alias="NVIDIA_API_KEY")
     openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")
     sagemaker_asr_endpoint_name: str = Field(default="", alias="SAGEMAKER_ASR_ENDPOINT_NAME")
+    saidwire_api_key: str = Field(default="", alias="SAIDWIRE_API_KEY")
     sarvam_api_key: str = Field(default="", alias="SARVAM_API_KEY")
     smallest_api_key: str = Field(default="", alias="SMALLEST_API_KEY")
     soniox_api_key: str = Field(default="", alias="SONIOX_API_KEY")

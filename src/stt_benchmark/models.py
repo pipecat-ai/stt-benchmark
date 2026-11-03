@@ -40,6 +40,7 @@ class ServiceName(StrEnum):
     OPENAI_GPT_LIVE_TRANSCRIBE = "openai_gpt_live_transcribe"
     OPENAI_GPT_REALTIME_WHISPER = "openai_gpt_realtime_whisper"
     OPENAI_REALTIME = "openai_realtime"
+    SAIDWIRE = "saidwire"
     SARVAM = "sarvam"
     SARVAM_SAARAS_V4 = "sarvam_saaras_v4"
     SMALLEST = "smallest"

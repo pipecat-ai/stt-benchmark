@@ -14,6 +14,8 @@ keywords = ["stt", "speech-to-text", "benchmark", "ttfb", "pipecat", "latency"]
 dependencies = [
     # Pipecat with STT providers
     "pipecat-ai[assemblyai,aws,azure,cartesia,deepgram,elevenlabs,fal,gladia,google,gradium,groq,meta,mistral,nvidia,openai,sagemaker,sarvam,smallest,soniox,speechmatics,whisper,silero,soundfile,xai]>=1.12.0,<2",
+    # STT services published as their own Pipecat packages
+    "pipecat-saidwire>=0.1.0",
     # Dataset handling
     "datasets>=2.16.0,<3.0.0",
     "scipy>=1.11.0",

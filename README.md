@@ -28,8 +28,9 @@ Benchmark results on 1000 samples from the `pipecat-ai/smart-turn-data-v3.1-trai
 | OpenAI | gpt-4o-transcribe | 99.3% | 75.7% | 3.10% | 2.95% | 637ms | 965ms | 1655ms |
 | OpenAI | gpt-realtime-whisper | 100.0% | 73.3% | 2.41% | 2.30% | 740ms | 878ms | 1080ms |
 | Smallest AI | pulse | 100.0% | 74.0% | 1.85% | 1.94% | 398ms | 533ms | 1593ms |
-| Soniox | stt-rt-v5 | 99.8% | 83.6% | 1.11% | 1.09% | 260ms | 305ms | 313ms |
+| Soniox | stt-rt-v6 | 99.9% | 88.8% | 0.74% | 0.71% | 266ms | 324ms | 343ms |
 | Soniox | stt-rt-v4 | 99.8% | 83.2% | 1.04% | 1.13% | 249ms | 281ms | 310ms |
+| Soniox | stt-rt-v5 | 99.8% | 83.6% | 1.11% | 1.09% | 260ms | 305ms | 313ms |
 | Speechmatics | linden-1 | 99.5% | 83.9% | 1.11% | 0.96% | 369ms | 438ms | 690ms |
 | Speechmatics | N/A | 99.7% | 83.1% | 1.17% | 0.96% | 495ms | 676ms | 736ms |
 | xAI | grok-voice-transcribe-2.0 | 99.8% | 89.4% | 1.12% | 0.79% | 1322ms | 1895ms | 2148ms |

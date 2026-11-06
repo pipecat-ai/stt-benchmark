@@ -502,6 +502,20 @@ def create_soniox_stt_rt_v5() -> FrameProcessor:
     )
 
 
+# stt-rt-v6: supersedes the stt-rt-v5 entry above.
+def create_soniox_stt_rt_v6() -> FrameProcessor:
+    from pipecat.services.soniox.stt import SonioxSTTService
+
+    return SonioxSTTService(
+        api_key=_get_env("SONIOX_API_KEY"),
+        settings=SonioxSTTService.Settings(
+            model="stt-rt-v6",
+            language_hints=[Language.EN],
+            language_hints_strict=True,
+        ),
+    )
+
+
 # Legacy real-time endpoint (/v2), driven by Pipecat's VAD. Benchmarked on
 # pipecat-ai <1.10; since 1.10.0 SpeechmaticsSTTService only speaks to the
 # Agent STT endpoint, so this entry no longer connects. Kept for the record.
@@ -748,6 +762,13 @@ STT_SERVICES: dict[str, ServiceDefinition] = {
         factory=create_soniox_stt_rt_v5,
         vendor="Soniox",
         model_label="stt-rt-v5",
+        required_env_vars=["SONIOX_API_KEY"],
+        is_current=False,  # superseded by soniox_stt_rt_v6
+    ),
+    "soniox_stt_rt_v6": ServiceDefinition(
+        factory=create_soniox_stt_rt_v6,
+        vendor="Soniox",
+        model_label="stt-rt-v6",
         required_env_vars=["SONIOX_API_KEY"],
     ),
     "speechmatics": ServiceDefinition(

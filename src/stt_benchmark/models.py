@@ -47,6 +47,7 @@ class ServiceName(StrEnum):
     SPEECHMATICS_AGENT_STT = "speechmatics_agent_stt"
     SONIOX = "soniox"
     SONIOX_STT_RT_V5 = "soniox_stt_rt_v5"
+    SONIOX_STT_RT_V6 = "soniox_stt_rt_v6"
     WHISPER = "whisper"
     XAI = "xai"
 

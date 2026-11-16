@@ -17,6 +17,7 @@ class ServiceName(StrEnum):
     ASSEMBLYAI = "assemblyai"
     ASSEMBLYAI_UNIVERSAL_3_5_PRO = "assemblyai_universal_3_5_pro"
     ASSEMBLYAI_UNIVERSAL_3_6_PRO = "assemblyai_universal_3_6_pro"
+    ASSEMBLYAI_STT_3_7_REALTIME_AGENT = "assemblyai_stt_3_7_realtime_agent"
     ASSEMBLYAI_SYNC = "assemblyai_sync"
     AWS = "aws"
     AZURE = "azure"

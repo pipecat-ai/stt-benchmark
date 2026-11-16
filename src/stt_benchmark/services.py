@@ -156,6 +156,23 @@ def create_assemblyai_universal_3_6_pro() -> FrameProcessor:
     )
 
 
+# assemblyai-stt-3-7-realtime-agent: Universal-3.7 for voice agents; supersedes the
+# universal-3-6-pro entry above. Same configuration as universal-3-6-pro.
+def create_assemblyai_stt_3_7_realtime_agent() -> FrameProcessor:
+    from pipecat.services.assemblyai.stt import AssemblyAISTTService
+
+    return AssemblyAISTTService(
+        api_key=_get_env("ASSEMBLYAI_API_KEY"),
+        settings=AssemblyAISTTService.Settings(
+            model="assemblyai-stt-3-7-realtime-agent",
+            min_turn_silence=50,
+            vad_threshold=0.2,
+            language_codes=[Language.EN],
+        ),
+        vad_force_turn_endpoint=True,
+    )
+
+
 # AssemblyAI's Sync API: one request/response per speech segment rather than a
 # streaming WebSocket, so it runs as a SegmentedSTTService off the pipeline's VAD.
 # It's the same universal-3-5-pro model as create_assemblyai_universal_3_5_pro()
@@ -595,6 +612,13 @@ STT_SERVICES: dict[str, ServiceDefinition] = {
         factory=create_assemblyai_universal_3_6_pro,
         vendor="AssemblyAI",
         model_label="universal-3-6-pro",
+        required_env_vars=["ASSEMBLYAI_API_KEY"],
+        is_current=False,  # superseded by assemblyai_stt_3_7_realtime_agent
+    ),
+    "assemblyai_stt_3_7_realtime_agent": ServiceDefinition(
+        factory=create_assemblyai_stt_3_7_realtime_agent,
+        vendor="AssemblyAI",
+        model_label="assemblyai-stt-3-7-realtime-agent",
         required_env_vars=["ASSEMBLYAI_API_KEY"],
     ),
     "assemblyai_sync": ServiceDefinition(

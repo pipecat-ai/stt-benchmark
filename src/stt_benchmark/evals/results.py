@@ -3,6 +3,10 @@
 The suite appends one JSON line per finished sample to ``results.jsonl``. A
 sample that ran to its end carries the bot's result message as what its one
 expectation matched; one that did not carries the harness's failure.
+
+A sample is a failure too when the STT service reported an error while it ran.
+Its transcription and TTFS are then left out, so it counts as a sample without
+a transcript and not towards WER or TTFS; what did arrive stays in the record.
 """
 
 import json
@@ -56,7 +60,8 @@ def benchmark_result(
 
     Returns:
         The result, with the bot's transcription and TTFS when the sample ran
-        to its end, or the failure as its error when it did not.
+        to its end without the STT service reporting an error, or the failure
+        as its error otherwise.
     """
     # The suite names a run "<scenario file>/<scenario>", here "<service>/<sample id>".
     sample_id = record["scenario"].split("/", 1)[-1]
@@ -70,6 +75,9 @@ def benchmark_result(
     message = _result_message(record) if record.get("passed") else None
     if message is None:
         result.error = _failure(record)
+        return result
+    if message.get("error"):
+        result.error = f"stt error: {message['error']}"
         return result
     result.transcription = message.get("transcription")
     result.ttfb_seconds = message.get("ttfb_seconds")

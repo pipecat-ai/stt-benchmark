@@ -3,9 +3,9 @@
 The eval suite spawns this bot once per sample, so every sample gets a fresh
 connection to the STT service. The harness plays the sample, marks its end with
 a DTMF keypress, and keeps sending silence. The bot collects the service's
-final transcripts and its TTFS, decides when the sample is done (see
-:mod:`stt_benchmark.evals.collector`), and reports the result to the harness in
-an RTVI server message.
+final transcripts, its TTFS and any error it reports, decides when the sample
+is done (see :mod:`stt_benchmark.evals.collector`), and reports the result to
+the harness in an RTVI server message.
 
 The runner body (the manifest entry's ``runner_body.data``) names the service::
 
@@ -36,6 +36,7 @@ from stt_benchmark.evals.collector import (
     SAMPLE_KEY,
     AudioEndObserver,
     SampleResult,
+    STTErrorObserver,
     collect_sample,
 )
 from stt_benchmark.observers.metrics_collector import MetricsCollectorObserver
@@ -74,6 +75,7 @@ def build_worker(
     )
 
     audio_end = AudioEndObserver()
+    errors = STTErrorObserver()
     metrics = MetricsCollectorObserver()
     transcripts = TranscriptionCollectorObserver()
     metrics.set_current_sample(SAMPLE_KEY)
@@ -86,7 +88,7 @@ def build_worker(
             audio_in_channels=1,
             enable_metrics=True,
         ),
-        observers=[audio_end, metrics, transcripts],
+        observers=[audio_end, errors, metrics, transcripts],
         idle_timeout_secs=idle_timeout_secs,
     )
 
@@ -95,6 +97,7 @@ def build_worker(
             audio_end,
             transcripts,
             metrics,
+            errors=errors,
             max_silence_secs=config.max_silence_timeout_secs,
             transcription_timeout_secs=config.transcription_timeout_secs,
         )

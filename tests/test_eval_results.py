@@ -81,6 +81,16 @@ def test_a_failed_record_gives_the_harnesss_failure_as_the_error():
     assert result.error == "timeout: no matching 'server_message' event arrived within 36000ms"
 
 
+def test_a_sample_the_stt_reported_an_error_for_is_a_failure_without_a_transcript():
+    """What arrived despite the error is not a transcript to score."""
+    matched = _message(transcription="hello", ttfb_seconds=1.2, error="connection error: ")
+
+    result = benchmark_result(_record(matched), SAMPLES)
+
+    assert (result.transcription, result.ttfb_seconds) == (None, None)
+    assert result.error == "stt error: connection error: "
+
+
 def test_a_run_that_never_started_gives_the_suites_error():
     result = benchmark_result(
         _record(passed=False, error="bot exited with code 1", turns=[]), SAMPLES

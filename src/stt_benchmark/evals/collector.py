@@ -16,8 +16,9 @@ import time
 from dataclasses import asdict, dataclass
 
 from loguru import logger
-from pipecat.frames.frames import InputDTMFFrame
+from pipecat.frames.frames import ErrorFrame, InputDTMFFrame
 from pipecat.observers.base_observer import BaseObserver, FramePushed
+from pipecat.services.stt_service import STTService
 
 from stt_benchmark.observers.metrics_collector import MetricsCollectorObserver
 from stt_benchmark.observers.transcription_collector import TranscriptionCollectorObserver
@@ -47,6 +48,30 @@ class AudioEndObserver(BaseObserver):
             self.ended_at = time.monotonic()
 
 
+class STTErrorObserver(BaseObserver):
+    """Notes the errors the STT service reports while the bot runs.
+
+    A service that loses its connection may reconnect and carry on, delivering
+    its transcripts late or only in part. What it then returns says nothing
+    about how well it transcribes, so a sample with an error is a failed sample
+    whatever else arrived.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.errors: list[str] = []
+
+    async def on_push_frame(self, data: FramePushed) -> None:
+        # The service pushes the frame once; later hops have other sources.
+        if isinstance(data.frame, ErrorFrame) and isinstance(data.source, STTService):
+            self.errors.append(str(data.frame.error) or "unspecified error")
+
+    @property
+    def first(self) -> str | None:
+        """The first error reported, None when there was none."""
+        return self.errors[0] if self.errors else None
+
+
 @dataclass
 class SampleResult:
     """What the bot measured for one sample, sent to the harness as its server message.
@@ -58,11 +83,15 @@ class SampleResult:
             reported none.
         capped: Whether the wait ended at its limit with the STT still
             delivering, so later transcripts may be missing.
+        error: The first error the STT service reported, None when it reported
+            none. With an error the sample failed, and the transcription and
+            TTFS are only what arrived regardless.
     """
 
     transcription: str | None
     ttfb_seconds: float | None
     capped: bool = False
+    error: str | None = None
 
     def as_message(self) -> dict:
         """The result as the data of the bot's server message."""
@@ -74,6 +103,7 @@ async def collect_sample(
     transcripts: TranscriptionCollectorObserver,
     metrics: MetricsCollectorObserver,
     *,
+    errors: STTErrorObserver | None = None,
     quiet_secs: float = 2.0,
     max_silence_secs: float = 10.0,
     transcription_timeout_secs: float = 10.0,
@@ -93,6 +123,7 @@ async def collect_sample(
         audio_end: When the sample's audio ended, once it has.
         transcripts: The final transcripts collected so far.
         metrics: The TTFB metrics collected so far.
+        errors: The errors the STT service reported so far, if they are watched.
         quiet_secs: How long the STT must be quiet for the sample to be done.
         max_silence_secs: How long after the audio ended to keep collecting.
         transcription_timeout_secs: How much longer to wait for a first transcript.
@@ -132,4 +163,5 @@ async def collect_sample(
         transcription=transcripts.get_transcription_for_sample(SAMPLE_KEY),
         ttfb_seconds=metrics.get_ttfb_for_sample(SAMPLE_KEY),
         capped=capped,
+        error=errors.first if errors else None,
     )

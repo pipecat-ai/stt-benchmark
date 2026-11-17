@@ -64,7 +64,7 @@ For production voice agents, **tail latency matters more than median**. Even occ
 
 | Metric | Description |
 |--------|-------------|
-| **Transcripts** | Percentage of samples where STT successfully returned a transcription. Samples without one are left out of the WER and Perfect columns |
+| **Transcripts** | Percentage of samples where STT successfully returned a transcription. A sample fails when the service returns nothing or reports an error, such as a lost connection, while it runs. Failed samples are left out of the WER, Perfect and TTFS columns |
 | **Perfect** | Transcriptions with 0% semantic WER, out of the samples with a transcription |
 | **WER Mean** | Average semantic word error rate across samples |
 | **Pooled WER** | Weighted WER (total errors / total reference words) |

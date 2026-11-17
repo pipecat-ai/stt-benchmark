@@ -64,7 +64,6 @@ class BenchmarkConfig(BaseSettings):
 
     # Audio configuration
     sample_rate: int = 16000
-    chunk_duration_ms: int = 20
 
     # VAD configuration
     vad_stop_secs: float = 0.2
@@ -81,12 +80,6 @@ class BenchmarkConfig(BaseSettings):
         """Create all required directories."""
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.audio_dir.mkdir(parents=True, exist_ok=True)
-
-    @property
-    def chunk_size_bytes(self) -> int:
-        """Calculate chunk size in bytes for streaming."""
-        samples_per_chunk = int(self.sample_rate * self.chunk_duration_ms / 1000)
-        return samples_per_chunk * 2  # 16-bit audio = 2 bytes per sample
 
 
 # Global configuration instance

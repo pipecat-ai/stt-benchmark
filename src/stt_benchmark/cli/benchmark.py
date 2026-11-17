@@ -2,6 +2,7 @@
 
 import asyncio
 import uuid
+from datetime import datetime
 
 import typer
 from rich.console import Console
@@ -9,8 +10,8 @@ from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, T
 
 from stt_benchmark.analysis.statistics import compute_statistics, format_statistics_table
 from stt_benchmark.config import get_config
-from stt_benchmark.models import BenchmarkRun, ServiceName
-from stt_benchmark.pipeline.benchmark_runner import BenchmarkRunner
+from stt_benchmark.evals.runner import run_suite
+from stt_benchmark.models import AudioSample, BenchmarkResult, BenchmarkRun, ServiceName
 from stt_benchmark.services import STT_SERVICES, parse_services_arg
 from stt_benchmark.storage.database import Database
 
@@ -58,6 +59,13 @@ def run_benchmark(
         "-v",
         help="VAD silence duration to trigger stop (seconds)",
     ),
+    concurrency: int = typer.Option(
+        1,
+        "--concurrency",
+        "-c",
+        min=1,
+        help="How many samples to benchmark at once, across all services",
+    ),
     test: bool = typer.Option(
         False,
         "--test",
@@ -68,7 +76,8 @@ def run_benchmark(
     """Run STT TTFB benchmarks on configured services.
 
     Benchmarks each audio sample with the specified STT services,
-    measuring Time To First Byte (TTFB) using Pipecat's MetricsFrame.
+    measuring Time To First Byte (TTFB) using Pipecat's MetricsFrame. Each
+    sample is played to a bot of its own by Pipecat's eval suite.
     """
     console.print("\n[bold blue]STT Benchmark - Run Benchmarks[/bold blue]\n")
 
@@ -89,6 +98,7 @@ def run_benchmark(
         console.print(f"Sample limit: {limit}")
     console.print(f"Skip existing: {skip_existing}")
     console.print(f"VAD stop secs: {vad_stop_secs}")
+    console.print(f"Concurrency: {concurrency}")
     if test:
         console.print("[yellow]Test mode: using separate test database[/yellow]")
 
@@ -128,78 +138,71 @@ def run_benchmark(
         )
         await db.insert_run(run_record)
 
-        # Create benchmark runner
-        runner = BenchmarkRunner(vad_stop_secs=vad_stop_secs)
-
-        all_stats = []
-
+        # Work out what each service still has to do
+        pending_by_service: dict[ServiceName, list[AudioSample]] = {}
         for service_name in service_list:
-            console.print(f"\n[bold]Benchmarking {service_name.value}...[/bold]")
+            if skip_existing:
+                pending = await db.get_samples_without_results(service_name, model)
+                pending = [s for s in pending if s in samples]
+            else:
+                pending = samples
+            if pending:
+                pending_by_service[service_name] = pending
+                console.print(f"  {service_name.value}: {len(pending)} pending samples")
+            else:
+                console.print(f"  {service_name.value}: all samples already benchmarked")
 
-            try:
-                # Get samples to process
-                if skip_existing:
-                    pending = await db.get_samples_without_results(service_name, model)
-                    pending = [s for s in pending if s in samples]
-                else:
-                    pending = samples
+        results: list[BenchmarkResult] = []
+        if pending_by_service:
+            run_dir = config.data_dir / "eval_runs" / datetime.now().strftime("%Y%m%d_%H%M%S")
+            console.print(f"\nRun directory: {run_dir}\n")
 
-                if not pending:
-                    console.print(f"  All samples already benchmarked for {service_name.value}")
-                    # Still compute stats from existing results
-                    results = await db.get_results_for_service(service_name, model)
-                    if results:
-                        stats = compute_statistics(results)
-                        if stats:
-                            all_stats.append(stats)
-                    continue
-
-                console.print(f"  Pending samples: {len(pending)}")
-
-                with Progress(
-                    TextColumn("[progress.description]{task.description}"),
-                    BarColumn(),
-                    MofNCompleteColumn(),
-                    TimeElapsedColumn(),
-                    console=console,
-                ) as progress:
-                    task = progress.add_task(
-                        f"Benchmarking {service_name.value}...",
-                        total=len(pending),
+            with Progress(
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                MofNCompleteColumn(),
+                TimeElapsedColumn(),
+                console=console,
+            ) as progress:
+                tasks = {
+                    service_name: progress.add_task(
+                        f"Benchmarking {service_name.value}...", total=len(pending)
                     )
+                    for service_name, pending in pending_by_service.items()
+                }
 
-                    def callback(current, total, sample_id, task_id=task):
-                        progress.update(task_id, completed=current)
+                def on_result(result: BenchmarkResult) -> None:
+                    progress.advance(tasks[result.service_name])
 
-                    results = await runner.benchmark_batch(
-                        pending,
-                        service_name,
-                        model=model,
-                        progress_callback=callback,
-                        db=db,
-                    )
+                results = await run_suite(
+                    run_dir,
+                    pending_by_service,
+                    db,
+                    concurrency=concurrency,
+                    vad_stop_secs=vad_stop_secs,
+                    model=model,
+                    on_result=on_result,
+                )
 
-                    progress.update(task, completed=len(pending))
+        # Compute and display statistics, including results from previous runs
+        all_stats = []
+        for service_name in service_list:
+            ran = [r for r in results if r.service_name == service_name]
+            if ran:
+                errors = [r for r in ran if r.error]
+                console.print(f"\n[bold]{service_name.value}[/bold]")
+                console.print(f"  [green]Completed: {len(ran) - len(errors)}[/green]")
+                if errors:
+                    console.print(f"  [yellow]Errors: {len(errors)}[/yellow]")
+                    console.print(f"  [dim]First error: {errors[0].error}[/dim]")
 
-                # Compute and display statistics
-                successful = len([r for r in results if not r.error])
-                errors = len([r for r in results if r.error])
-
-                console.print(f"  [green]Completed: {successful}[/green]")
-                if errors > 0:
-                    console.print(f"  [yellow]Errors: {errors}[/yellow]")
-
-                # Get all results for this service (including previous runs)
-                all_results = await db.get_results_for_service(service_name, model)
-                stats = compute_statistics(all_results)
-                if stats:
-                    all_stats.append(stats)
+            all_results = await db.get_results_for_service(service_name, model)
+            stats = compute_statistics(all_results) if all_results else None
+            if stats:
+                all_stats.append(stats)
+                if ran:
                     console.print(f"  Mean TTFB: {stats.ttfb_mean:.3f}s")
                     console.print(f"  P95 TTFB:  {stats.ttfb_p95:.3f}s")
-
-            except Exception as e:
-                console.print(f"  [red]Error: {e}[/red]")
-                continue
 
         # Mark run as complete
         await db.update_run_completed(run_record.run_id)

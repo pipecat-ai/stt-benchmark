@@ -71,6 +71,7 @@ uv run stt-benchmark run [OPTIONS]
 | `-m, --model` | TEXT | - | Model name override |
 | `--skip-existing/--no-skip-existing` | BOOL | True | Skip already benchmarked samples |
 | `-v, --vad-stop-secs` | FLOAT | 0.2 | VAD silence duration to trigger stop |
+| `-c, --concurrency` | INT | 1 | How many samples to benchmark at once, across all services |
 | `-t, --test` | BOOL | False | Use separate test database to avoid affecting real data |
 
 ### Available Services
@@ -107,7 +108,28 @@ uv run stt-benchmark run --test --limit 1 --no-skip-existing
 
 # Test specific services
 uv run stt-benchmark run --test -s deepgram,gladia,gradium --limit 1
+
+# Run 8 samples at a time
+uv run stt-benchmark run --services deepgram --concurrency 8
 ```
+
+### Concurrency
+
+Samples run one at a time by default, so nothing else on the machine affects the latency being measured. `--concurrency N` runs N at once, which makes a large run much faster.
+
+It is opt-in because load on the machine can add to latency, and how much a machine can take depends on its CPU. Before publishing numbers from a concurrent run, compare a few dozen samples at `--concurrency 1` with the level you plan to use.
+
+A provider may also limit concurrent streams. A sample refused for that reason is stored with its error; rerun it at a lower concurrency with `--no-skip-existing`.
+
+### Run Output
+
+Each run keeps what the eval suite wrote under `stt_benchmark_data/eval_runs/<timestamp>/`:
+
+| Path | Contents |
+|------|----------|
+| `manifest.yaml`, `scenarios/` | The eval suite the run executed: one entry per service, one scenario per sample |
+| `results.jsonl` | One record per sample: the bot's result, or the harness's failure, and every metric the bot reported |
+| `logs/` | Each sample's bot log and harness trace; start here when a sample has an error |
 
 ---
 

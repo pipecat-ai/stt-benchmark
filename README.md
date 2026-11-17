@@ -148,6 +148,17 @@ cp env.example .env
 
 ## How It Works
 
+### Running a Sample
+
+Each sample is run by [Pipecat's eval harness](https://github.com/pipecat-ai/pipecat/tree/main/evals), the same one that tests Pipecat's own bots. For every sample, `stt-benchmark run`:
+
+1. Starts a small bot ([`evals/bot.py`](src/stt_benchmark/evals/bot.py)) holding a Silero VAD and the STT service under test. A fresh bot per sample means a fresh connection to the STT service per sample.
+2. Has the harness connect to it as a client and play the sample in real time, followed by silence, as a caller would.
+3. Lets the bot collect every final transcript and the service's TTFS. The bot decides the sample is done once the VAD has heard the speaker stop and the STT service has been quiet for 2 seconds (10 seconds at most).
+4. Stores the result the bot reports back.
+
+Samples run one at a time unless you ask for more with `--concurrency`; see [Concurrency](docs/cli.md#concurrency).
+
 ### TTFS Measurement
 
 **TTFS for STT is different from typical request/response latency.** Since STT services receive continuous audio input, there's no discrete request to measure from. Instead, we measure from when the user **stops speaking** to when the **final transcription** arrives.
@@ -217,6 +228,9 @@ uv run stt-benchmark run --services all
 
 # Limit samples and adjust VAD
 uv run stt-benchmark run --services deepgram --limit 50 --vad-stop-secs 0.3
+
+# Run 8 samples at a time (the default is 1)
+uv run stt-benchmark run --services deepgram --concurrency 8
 ```
 
 ### Generating Ground Truth
@@ -260,6 +274,7 @@ See [docs/cli.md](docs/cli.md) for complete CLI reference.
 stt_benchmark_data/
 ├── audio/                    # Downloaded audio files
 ├── results.db                # SQLite database
+├── eval_runs/                # Per-run manifest, scenarios, logs and results.jsonl
 ├── ground_truth_runs/        # Iteration JSONL files
 ├── validation_summary.txt    # Generated reports
 └── validation_full.csv
@@ -278,26 +293,28 @@ stt_benchmark_data/
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│                      PipelineWorker                      │
-│  observers=[MetricsCollector, TranscriptionCollector]    │
-├──────────────────────────────────────────────────────────┤
-│                                                          │
-│       ┌──────────────────┐                               │
-│       │ SyntheticInput   │  Plays audio at real-time pace│
-│       │ Transport        │                               │
-│       └────────┬─────────┘                               │
-│                ▼                                         │
-│       ┌──────────────────┐                               │
-│       │ VADProcessor     │  Emits VAD frames via Silero  │
-│       └────────┬─────────┘                               │
-│                ▼                                         │
-│       ┌──────────────────┐                               │
-│       │ STTService       │  Emits transcript + metrics   │
-│       └──────────────────┘                               │
-│                           Observers capture frames       │
-└──────────────────────────────────────────────────────────┘
+┌───────────────────────────┐          ┌───────────────────────────────────────┐
+│  Eval harness             │          │  Bot (one per sample)                 │
+│  (pipecat.evals)          │          │                                       │
+│                           │  audio,  │   ┌──────────────┐                    │
+│  Plays the sample in real │  then    │   │ Eval         │                    │
+│  time, then silence       │ silence  │   │ transport    │                    │
+│                           ├─────────►│   └──────┬───────┘                    │
+│                           │          │          ▼                            │
+│                           │          │   ┌──────────────┐  Emits VAD frames  │
+│                           │          │   │ VADProcessor │  via Silero        │
+│                           │          │   └──────┬───────┘                    │
+│                           │          │          ▼                            │
+│                           │  result  │   ┌──────────────┐  Emits transcripts │
+│  Waits for the bot's      │ message  │   │ STTService   │  and metrics       │
+│  result, writes           │◄─────────┤   └──────────────┘                    │
+│  results.jsonl            │          │   Observers collect the transcripts   │
+│                           │          │   and TTFS; the bot reports them once │
+│                           │          │   the STT service has gone quiet      │
+└───────────────────────────┘          └───────────────────────────────────────┘
 ```
+
+The harness and the bot are separate processes talking over a local WebSocket. `stt-benchmark run` writes an eval suite for the samples to run (one scenario per sample), runs it, and copies each result from the suite's `results.jsonl` into `results.db`.
 
 ## Dataset
 

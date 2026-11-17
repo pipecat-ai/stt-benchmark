@@ -71,6 +71,16 @@ The default VAD stop threshold is 0.2 seconds, which works very well in all of o
 uv run stt-benchmark run --services deepgram --vad-stop-secs 0.3
 ```
 
+### Running faster
+
+Samples run one at a time by default, so that nothing else on the machine affects the latency being measured. To get through a large run faster, run several at once:
+
+```bash
+uv run stt-benchmark run --services deepgram --concurrency 8
+```
+
+What your machine can take depends on its CPU, so if you plan to use the numbers, compare a small run at `--concurrency 1` with one at your chosen level first. See [Concurrency](cli.md#concurrency) for details.
+
 ### Multiple services
 
 Compare services side by side:

@@ -4,15 +4,17 @@ import asyncio
 import time
 
 from pipecat.audio.dtmf.types import KeypadEntry
-from pipecat.frames.frames import InputAudioRawFrame, InputDTMFFrame
+from pipecat.frames.frames import ErrorFrame, InputAudioRawFrame, InputDTMFFrame
 from pipecat.observers.base_observer import FramePushed
 from pipecat.processors.filters.identity_filter import IdentityFilter
 from pipecat.processors.frame_processor import FrameDirection
+from pipecat.services.stt_service import STTService
 
 from stt_benchmark.evals.collector import (
     SAMPLE_KEY,
     AudioEndObserver,
     SampleResult,
+    STTErrorObserver,
     collect_sample,
 )
 from stt_benchmark.observers.metrics_collector import MetricsCollectorObserver
@@ -176,4 +178,47 @@ def test_the_message_names_itself_and_carries_the_result():
         "transcription": "hi",
         "ttfb_seconds": 0.2,
         "capped": True,
+        "error": None,
     }
+
+
+class _SilentSTT(STTService):
+    async def run_stt(self, audio):
+        yield None
+
+
+async def test_an_error_from_the_stt_service_is_noted_once():
+    errors = STTErrorObserver()
+    assert errors.first is None
+
+    lost = ErrorFrame(error="connection error: timed out")
+    # The service pushes it; the processors upstream then pass it along.
+    await errors.on_push_frame(
+        FramePushed(
+            source=_SilentSTT(),
+            destination=IdentityFilter(),
+            frame=lost,
+            direction=FrameDirection.UPSTREAM,
+            timestamp=0,
+        )
+    )
+    await errors.on_push_frame(_pushed(lost))
+
+    assert errors.errors == ["connection error: timed out"]
+    assert errors.first == "connection error: timed out"
+
+
+async def test_a_sample_with_an_stt_error_reports_it_with_what_arrived():
+    audio_end, transcripts, metrics = _observers()
+    errors = STTErrorObserver()
+    errors.errors.append("connection error: timed out")
+    _end_audio(audio_end)
+    transcripts._handle_transcription("hello")
+    _ttfb(metrics, 1.2)
+
+    result = await collect_sample(audio_end, transcripts, metrics, errors=errors, **FAST)
+
+    assert result == SampleResult(
+        transcription="hello", ttfb_seconds=1.2, error="connection error: timed out"
+    )
+    assert result.as_message()["error"] == "connection error: timed out"

@@ -99,6 +99,14 @@ class MultiSegmentSTT(STTService):
                 await asyncio.sleep(self._gap)
 
 
+class ReconnectingSTT(MultiSegmentSTT):
+    """Mock STT that reports a connection error as it starts, then carries on."""
+
+    async def start(self, frame: StartFrame):
+        await super().start(frame)
+        await self.push_error(error_msg="connection error: timed out")
+
+
 class HarnessAudio(FrameProcessor):
     """Stands in for the eval harness: plays a sample in real time, marks its end, then silence."""
 
@@ -168,13 +176,15 @@ def _sample_audio() -> bytes:
     return Path(row[0]).read_bytes()
 
 
-async def _run_with_mock(segments: list[str], gap: float) -> tuple[SampleResult, list]:
+async def _run_with_mock(
+    segments: list[str], gap: float, stt_class: type[MultiSegmentSTT] = MultiSegmentSTT
+) -> tuple[SampleResult, list]:
     """Run the bot's pipeline on a sample, with a mock STT, as the harness would drive it."""
     config = get_config()
     sink = MessageSink()
     worker, report_sample = build_worker(
         HarnessAudio(_sample_audio(), config.sample_rate),
-        MultiSegmentSTT(segments=segments, gap=gap),
+        stt_class(segments=segments, gap=gap),
         sink,
         vad_stop_secs=config.vad_stop_secs,
     )
@@ -222,3 +232,11 @@ async def test_slowly_trickling_segments_are_collected():
     result, _ = await _run_with_mock(SEGMENTS, gap=1.5)
 
     assert result.transcription == EXPECTED
+
+
+async def test_an_stt_error_fails_the_sample_even_when_transcripts_arrive():
+    """A service that reconnected may have lost audio; its transcript is not scored."""
+    result, messages = await _run_with_mock(SEGMENTS, gap=0.1, stt_class=ReconnectingSTT)
+
+    assert result.error == "connection error: timed out"
+    assert messages[0]["error"] == "connection error: timed out"

@@ -29,6 +29,7 @@ dependencies = [
     "loguru>=0.7.0",
     "numpy>=1.26.0",
     "aiohttp>=3.9.0",
+    "pyyaml>=6.0",
     "librosa",
     # Semantic WER evaluation (Claude)
     "anthropic>=0.76.0",

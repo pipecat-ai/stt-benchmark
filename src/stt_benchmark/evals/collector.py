@@ -21,6 +21,10 @@ from stt_benchmark.observers.transcription_collector import TranscriptionCollect
 # The observers key what they collect by sample; a bot serves one sample.
 SAMPLE_KEY = "sample"
 
+# What the bot's server message calls itself, so a scenario can tell it from
+# any other the bot might send.
+RESULT_MESSAGE_TYPE = "stt-benchmark-result"
+
 
 class VADStateObserver(BaseObserver):
     """Tracks whether the VAD hears the user speaking, and when it last heard them stop."""
@@ -68,7 +72,7 @@ class SampleResult:
 
     def as_message(self) -> dict:
         """The result as the data of the bot's server message."""
-        return {"type": "stt-benchmark-result", **asdict(self)}
+        return {"type": RESULT_MESSAGE_TYPE, **asdict(self)}
 
 
 async def collect_sample(

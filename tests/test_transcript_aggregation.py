@@ -11,9 +11,11 @@ from collections.abc import AsyncGenerator
 from pathlib import Path
 
 import pytest
+from pipecat.audio.dtmf.types import KeypadEntry
 from pipecat.frames.frames import (
     Frame,
     InputAudioRawFrame,
+    InputDTMFFrame,
     StartFrame,
     TranscriptionFrame,
     VADUserStoppedSpeakingFrame,
@@ -98,7 +100,7 @@ class MultiSegmentSTT(STTService):
 
 
 class HarnessAudio(FrameProcessor):
-    """Stands in for the eval harness: plays a sample in real time, then silence."""
+    """Stands in for the eval harness: plays a sample in real time, marks its end, then silence."""
 
     CHUNK_MS = 20
 
@@ -117,7 +119,11 @@ class HarnessAudio(FrameProcessor):
     async def _play(self):
         chunk = int(self._sample_rate * self.CHUNK_MS / 1000) * 2
         offset = 0
+        marked = False
         while True:
+            if offset >= len(self._audio) and not marked:
+                await self.push_frame(InputDTMFFrame(button=KeypadEntry.POUND))
+                marked = True
             audio = self._audio[offset : offset + chunk].ljust(chunk, b"\x00")
             offset += chunk
             await self.push_frame(

@@ -1,9 +1,10 @@
 """Writing the eval suite a benchmark run executes.
 
 A run is one manifest: an entry per STT service, each playing its pending
-samples to the benchmark bot. A sample is one scenario with a single turn, so
-the suite spawns a fresh bot, and the bot opens a fresh connection to the STT
-service, for every sample.
+samples to the benchmark bot. A sample is one scenario, so the suite spawns a
+fresh bot, and the bot opens a fresh connection to the STT service, for every
+sample. The scenario plays the sample, then marks the end of its audio for the
+bot with a DTMF keypress and waits for the bot's result.
 """
 
 from pathlib import Path
@@ -18,8 +19,16 @@ from stt_benchmark.models import AudioSample, ServiceName
 
 BOT_PATH = Path(__file__).with_name("bot.py")
 
-# What the turn's budget allows on top of the bot's own limits: the wait for a
-# late TTFB, and slack for the VAD's stop and the message's way back.
+# The keypress that marks the end of a sample's audio for the bot. It is sent as
+# data, not sound, so the STT service never hears it.
+AUDIO_END_MARKER = "#"
+# How long after the sample's own length the marker is sent. The harness times
+# the marker from the moment it queued the audio, which starts playing a frame
+# or so later, so the marker must not get there first.
+AUDIO_END_MARGIN_MS = 200
+
+# What the bot's result may take once the audio has ended, on top of the bot's
+# own limits: the wait for a late TTFB, and slack for the message's way back.
 TTFB_WAIT_SECS = 2.5
 BUDGET_MARGIN_SECS = 10.0
 
@@ -44,12 +53,16 @@ def ensure_wav(sample: AudioSample) -> Path:
     return wav_path
 
 
-def sample_budget_ms(sample: AudioSample) -> int:
-    """How long the harness waits for the bot's result: the audio, then the bot's limits, then slack."""
+def audio_end_delay_ms(sample: AudioSample) -> int:
+    """How long after the harness starts the sample it marks the audio's end."""
+    return int(sample.duration_seconds * 1000) + AUDIO_END_MARGIN_MS
+
+
+def result_budget_ms() -> int:
+    """How long the harness waits for the bot's result once the audio has ended: the bot's limits, then slack."""
     config = get_config()
     seconds = (
-        sample.duration_seconds
-        + config.max_silence_timeout_secs
+        config.max_silence_timeout_secs
         + config.transcription_timeout_secs
         + TTFB_WAIT_SECS
         + BUDGET_MARGIN_SECS
@@ -66,14 +79,21 @@ def _scenario(sample: AudioSample) -> dict:
                 # here is judged, so the turn only names what it plays.
                 "user": f"(sample {sample.sample_id})",
                 "audio": str(ensure_wav(sample)),
+            },
+            {
+                # Tells the bot the sample's audio has ended, so that a pause in
+                # the speech is never taken for its end. The harness goes on
+                # sending silence while the bot waits for the STT to finish.
+                "dtmf": AUDIO_END_MARKER,
+                "send_after": {"delay_ms": audio_end_delay_ms(sample)},
                 "expect": [
                     {
                         "event": "server_message",
                         "text_contains": RESULT_MESSAGE_TYPE,
-                        "within_ms": sample_budget_ms(sample),
+                        "within_ms": result_budget_ms(),
                     }
                 ],
-            }
+            },
         ],
     }
 

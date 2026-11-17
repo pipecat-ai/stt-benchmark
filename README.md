@@ -153,8 +153,8 @@ cp env.example .env
 Each sample is run by [Pipecat's eval harness](https://github.com/pipecat-ai/pipecat/tree/main/evals), the same one that tests Pipecat's own bots. For every sample, `stt-benchmark run`:
 
 1. Starts a small bot ([`evals/bot.py`](src/stt_benchmark/evals/bot.py)) holding a Silero VAD and the STT service under test. A fresh bot per sample means a fresh connection to the STT service per sample.
-2. Has the harness connect to it as a client and play the sample in real time, followed by silence, as a caller would.
-3. Lets the bot collect every final transcript and the service's TTFS. The bot decides the sample is done once the VAD has heard the speaker stop and the STT service has been quiet for 2 seconds (10 seconds at most).
+2. Has the harness connect to it as a client and play the sample in real time, followed by silence, as a caller would. When the sample's audio has finished, the harness tells the bot so with a marker (a DTMF keypress, sent as data, which the STT service never hears).
+3. Lets the bot collect every final transcript and the service's TTFS. The bot decides the sample is done once the audio has finished and the STT service has been quiet for 2 seconds (10 seconds at most).
 4. Stores the result the bot reports back.
 
 Samples run one at a time unless you ask for more with `--concurrency`; see [Concurrency](docs/cli.md#concurrency).

@@ -3,10 +3,16 @@
 import asyncio
 import time
 
+from pipecat.audio.dtmf.types import KeypadEntry
+from pipecat.frames.frames import InputAudioRawFrame, InputDTMFFrame
+from pipecat.observers.base_observer import FramePushed
+from pipecat.processors.filters.identity_filter import IdentityFilter
+from pipecat.processors.frame_processor import FrameDirection
+
 from stt_benchmark.evals.collector import (
     SAMPLE_KEY,
+    AudioEndObserver,
     SampleResult,
-    VADStateObserver,
     collect_sample,
 )
 from stt_benchmark.observers.metrics_collector import MetricsCollectorObserver
@@ -23,22 +29,16 @@ FAST = {
 
 
 def _observers():
-    vad = VADStateObserver()
+    audio_end = AudioEndObserver()
     transcripts = TranscriptionCollectorObserver()
     metrics = MetricsCollectorObserver()
     transcripts.set_current_sample(SAMPLE_KEY)
     metrics.set_current_sample(SAMPLE_KEY)
-    return vad, transcripts, metrics
+    return audio_end, transcripts, metrics
 
 
-def _start(vad: VADStateObserver) -> None:
-    vad.speaking = True
-    vad.started = True
-
-
-def _stop(vad: VADStateObserver) -> None:
-    vad.speaking = False
-    vad.stopped_at = time.monotonic()
+def _end_audio(audio_end: AudioEndObserver) -> None:
+    audio_end.ended_at = time.monotonic()
 
 
 def _ttfb(metrics: MetricsCollectorObserver, value: float) -> None:
@@ -46,48 +46,70 @@ def _ttfb(metrics: MetricsCollectorObserver, value: float) -> None:
     metrics._ttfb_received.set()
 
 
-async def test_done_once_the_user_stopped_and_the_stt_is_quiet():
-    vad, transcripts, metrics = _observers()
-    _start(vad)
-    _stop(vad)
+def _pushed(frame) -> FramePushed:
+    return FramePushed(
+        source=IdentityFilter(),
+        destination=IdentityFilter(),
+        frame=frame,
+        direction=FrameDirection.DOWNSTREAM,
+        timestamp=0,
+    )
+
+
+async def test_the_marker_is_the_end_of_the_audio():
+    audio_end = AudioEndObserver()
+
+    await audio_end.on_push_frame(
+        _pushed(InputAudioRawFrame(audio=b"\x00\x00", sample_rate=16000, num_channels=1))
+    )
+    assert audio_end.ended_at is None
+
+    marker = InputDTMFFrame(button=KeypadEntry.POUND)
+    await audio_end.on_push_frame(_pushed(marker))
+    first = audio_end.ended_at
+    assert first is not None
+    # The frame is pushed again by each processor it passes; the first time counts.
+    await audio_end.on_push_frame(_pushed(marker))
+    assert audio_end.ended_at == first
+
+
+async def test_done_once_the_audio_ended_and_the_stt_is_quiet():
+    audio_end, transcripts, metrics = _observers()
+    _end_audio(audio_end)
     transcripts._handle_transcription("hello there")
     _ttfb(metrics, 0.31)
 
     started = time.monotonic()
-    result = await collect_sample(vad, transcripts, metrics, **FAST)
+    result = await collect_sample(audio_end, transcripts, metrics, **FAST)
 
     assert result == SampleResult(transcription="hello there", ttfb_seconds=0.31)
     assert 0.1 <= time.monotonic() - started < 0.3
 
 
-async def test_a_transcript_during_a_pause_does_not_end_the_sample():
-    vad, transcripts, metrics = _observers()
-    _start(vad)
-    _stop(vad)
-    transcripts._handle_transcription("I'd like to book a table um")
+async def test_a_long_pause_in_the_speech_does_not_end_the_sample():
+    """A sound, then silence far longer than the quiet window, then the speech."""
+    audio_end, transcripts, metrics = _observers()
+    transcripts._handle_transcription("Hi.")
 
-    async def resume_and_finish():
-        await asyncio.sleep(0.05)
-        _start(vad)
-        # Longer than the quiet window: speech with no transcript in it.
-        await asyncio.sleep(0.25)
-        _stop(vad)
-        transcripts._handle_transcription("for four people on Friday")
-        _ttfb(metrics, 0.45)
+    async def speak_then_end():
+        # Several quiet windows with no transcript: the audio is still playing.
+        await asyncio.sleep(0.4)
+        transcripts._handle_transcription("My subscription renews tomorrow.")
+        _end_audio(audio_end)
+        _ttfb(metrics, 0.27)
 
-    rest = asyncio.create_task(resume_and_finish())
-    result = await collect_sample(vad, transcripts, metrics, **FAST)
+    rest = asyncio.create_task(speak_then_end())
+    result = await collect_sample(audio_end, transcripts, metrics, **FAST)
     await rest
 
-    assert result.transcription == "I'd like to book a table um for four people on Friday"
-    assert result.ttfb_seconds == 0.45
+    assert result.transcription == "Hi. My subscription renews tomorrow."
+    assert result.ttfb_seconds == 0.27
     assert not result.capped
 
 
 async def test_each_transcript_reopens_the_quiet_window():
-    vad, transcripts, metrics = _observers()
-    _start(vad)
-    _stop(vad)
+    audio_end, transcripts, metrics = _observers()
+    _end_audio(audio_end)
     transcripts._handle_transcription("one")
 
     async def late():
@@ -95,16 +117,15 @@ async def test_each_transcript_reopens_the_quiet_window():
         transcripts._handle_transcription("two")
 
     rest = asyncio.create_task(late())
-    result = await collect_sample(vad, transcripts, metrics, **FAST)
+    result = await collect_sample(audio_end, transcripts, metrics, **FAST)
     await rest
 
     assert result.transcription == "one two"
 
 
 async def test_the_limit_ends_a_sample_still_delivering():
-    vad, transcripts, metrics = _observers()
-    _start(vad)
-    _stop(vad)
+    audio_end, transcripts, metrics = _observers()
+    _end_audio(audio_end)
 
     async def keep_talking():
         while True:
@@ -112,7 +133,7 @@ async def test_the_limit_ends_a_sample_still_delivering():
             await asyncio.sleep(0.03)
 
     chatter = asyncio.create_task(keep_talking())
-    result = await collect_sample(vad, transcripts, metrics, **FAST)
+    result = await collect_sample(audio_end, transcripts, metrics, **FAST)
     chatter.cancel()
 
     assert result.capped
@@ -120,30 +141,19 @@ async def test_the_limit_ends_a_sample_still_delivering():
 
 
 async def test_no_transcription_ends_after_both_limits():
-    vad, transcripts, metrics = _observers()
-    _start(vad)
-    _stop(vad)
+    audio_end, transcripts, metrics = _observers()
+    _end_audio(audio_end)
 
     started = time.monotonic()
-    result = await collect_sample(vad, transcripts, metrics, **FAST)
+    result = await collect_sample(audio_end, transcripts, metrics, **FAST)
 
     assert result == SampleResult(transcription=None, ttfb_seconds=None)
     assert time.monotonic() - started >= 0.5
 
 
-async def test_a_sample_the_vad_never_hears_ends_on_the_stts_silence():
-    vad, transcripts, metrics = _observers()
-    transcripts._handle_transcription("quiet words")
-
-    result = await collect_sample(vad, transcripts, metrics, **FAST)
-
-    assert result == SampleResult(transcription="quiet words", ttfb_seconds=None)
-
-
 async def test_a_late_ttfb_is_waited_for():
-    vad, transcripts, metrics = _observers()
-    _start(vad)
-    _stop(vad)
+    audio_end, transcripts, metrics = _observers()
+    _end_audio(audio_end)
     transcripts._handle_transcription("hello")
 
     async def late():
@@ -151,7 +161,9 @@ async def test_a_late_ttfb_is_waited_for():
         _ttfb(metrics, 0.4)
 
     rest = asyncio.create_task(late())
-    result = await collect_sample(vad, transcripts, metrics, **{**FAST, "ttfb_wait_secs": 0.5})
+    result = await collect_sample(
+        audio_end, transcripts, metrics, **{**FAST, "ttfb_wait_secs": 0.5}
+    )
     await rest
 
     assert result.ttfb_seconds == 0.4

@@ -1,10 +1,11 @@
 """The benchmark's eval bot: one STT service behind a VAD, audio in, measurements out.
 
 The eval suite spawns this bot once per sample, so every sample gets a fresh
-connection to the STT service. The harness plays the sample and then silence.
-The bot collects the service's final transcripts and its TTFS, decides when
-the sample is done (see :mod:`stt_benchmark.evals.collector`), and reports the
-result to the harness in an RTVI server message.
+connection to the STT service. The harness plays the sample, marks its end with
+a DTMF keypress, and keeps sending silence. The bot collects the service's
+final transcripts and its TTFS, decides when the sample is done (see
+:mod:`stt_benchmark.evals.collector`), and reports the result to the harness in
+an RTVI server message.
 
 The runner body (the manifest entry's ``runner_body.data``) names the service::
 
@@ -33,8 +34,8 @@ from pipecat.workers.runner import WorkerRunner
 from stt_benchmark.config import get_config
 from stt_benchmark.evals.collector import (
     SAMPLE_KEY,
+    AudioEndObserver,
     SampleResult,
-    VADStateObserver,
     collect_sample,
 )
 from stt_benchmark.observers.metrics_collector import MetricsCollectorObserver
@@ -72,7 +73,7 @@ def build_worker(
         vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=vad_stop_secs))
     )
 
-    vad = VADStateObserver()
+    audio_end = AudioEndObserver()
     metrics = MetricsCollectorObserver()
     transcripts = TranscriptionCollectorObserver()
     metrics.set_current_sample(SAMPLE_KEY)
@@ -85,13 +86,13 @@ def build_worker(
             audio_in_channels=1,
             enable_metrics=True,
         ),
-        observers=[vad, metrics, transcripts],
+        observers=[audio_end, metrics, transcripts],
         idle_timeout_secs=idle_timeout_secs,
     )
 
     async def report_sample() -> SampleResult:
         result = await collect_sample(
-            vad,
+            audio_end,
             transcripts,
             metrics,
             max_silence_secs=config.max_silence_timeout_secs,

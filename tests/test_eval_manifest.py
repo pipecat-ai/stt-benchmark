@@ -6,7 +6,7 @@ import soundfile as sf
 from pipecat.evals.scenario import EvalScenarioFile
 from pipecat.evals.suite import EvalManifest
 
-from stt_benchmark.evals.manifest import BOT_PATH, ensure_wav, sample_budget_ms, write_suite
+from stt_benchmark.evals.manifest import BOT_PATH, ensure_wav, write_suite
 from stt_benchmark.models import AudioSample, ServiceName
 
 
@@ -67,7 +67,7 @@ def test_the_manifest_runs_every_sample_of_every_service(tmp_path, samples):
     assert (deepgram.concurrency, soniox.concurrency) == (None, 2)
 
 
-def test_a_sample_is_one_turn_that_waits_for_the_bots_result(tmp_path, samples):
+def test_a_sample_plays_its_audio_marks_its_end_and_waits_for_the_bots_result(tmp_path, samples):
     write_suite(tmp_path / "run", {ServiceName.DEEPGRAM: samples}, concurrency=1)
 
     scenario = EvalScenarioFile.load(tmp_path / "run" / "scenarios" / "deepgram.yaml")[
@@ -75,11 +75,16 @@ def test_a_sample_is_one_turn_that_waits_for_the_bots_result(tmp_path, samples):
     ]
 
     assert scenario.user_audio
-    (turn,) = scenario.turns
-    assert turn.audio == str(ensure_wav(samples[1]))
-    (expectation,) = turn.expect
+    play, mark = scenario.turns
+    assert play.audio == str(ensure_wav(samples[1]))
+    assert play.expect == []
+
+    # The marker goes out once the 2.5 s sample has played, a little after.
+    assert mark.dtmf == "#"
+    assert mark.send_after is not None
+    assert (mark.send_after.event, mark.send_after.delay_ms) == (None, 2700)
+    (expectation,) = mark.expect
     assert expectation.event == "server_message"
     assert expectation.text_contains == "stt-benchmark-result"
-    assert expectation.within_ms == sample_budget_ms(samples[1])
-    # The audio, the bot's 10 s + 10 s limits, the TTFB wait and the margin.
-    assert expectation.within_ms == int((2.5 + 10 + 10 + 2.5 + 10) * 1000)
+    # From the end of the audio: the bot's 10 s + 10 s limits, the TTFB wait and the margin.
+    assert expectation.within_ms == int((10 + 10 + 2.5 + 10) * 1000)

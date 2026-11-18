@@ -40,8 +40,15 @@ string — not a marketing name. Pick it in this order:
    `nova-3-general`, Cartesia `ink-2`, AssemblyAI `universal-3-6-pro`. This
    keeps the label reproducible and unambiguous (it's the value you'd pass to
    re-run it).
+
+   **If the vendor lets you choose a model, the factory must name one.** Don't
+   leave the choice to the vendor's default: the default can change without
+   notice, and the entry then no longer says what was measured. Zoom, for
+   example, picks a standard model when none is requested, so `create_zoom`
+   passes `zoom-scribe-multilingual` explicitly.
 2. **The vendor exposes no selectable model** (AWS, Azure, fal, Speechmatics, …)
-   → use `N/A`. These vendors serve one engine with no model string to pin; you'd
+   → use `N/A`. `N/A` means there is nothing to choose, never "we used the
+   default". These vendors serve one engine with no model string to pin; you'd
    only add a second entry once they ship a *named/versioned* model (e.g.
    `aws_<newmodel>`), leaving the bare entry as the `N/A` baseline.
 

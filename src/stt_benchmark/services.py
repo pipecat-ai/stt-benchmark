@@ -596,15 +596,27 @@ def create_xai() -> FrameProcessor:
 
 
 # Zoom Scribe Live, with Scribe's own voice activity detection off: the pipeline's
-# VAD ends each turn, as it does for the other services measured here.
-def create_zoom() -> FrameProcessor:
+# VAD ends each turn, as it does for the other services measured here. The model is
+# always named: left out, Scribe picks a standard model itself.
+def _create_zoom(model: str) -> FrameProcessor:
     from pipecat.services.zoom_ai.stt import ZoomAISTTService
 
     return ZoomAISTTService(
         api_key=_get_env("ZOOM_AI_API_KEY"),
-        settings=ZoomAISTTService.Settings(language=Language.EN_US),
+        settings=ZoomAISTTService.Settings(model=model, language=Language.EN_US),
         vad_force_turn_endpoint=True,
     )
+
+
+# zoom-scribe-multilingual: Scribe's standard model.
+def create_zoom() -> FrameProcessor:
+    return _create_zoom("zoom-scribe-multilingual")
+
+
+# zoom-scribe-en-pro: Scribe's premium English model; the key needs premium-model
+# access. A separate tier from zoom-scribe-multilingual, not a successor to it.
+def create_zoom_scribe_en_pro() -> FrameProcessor:
+    return _create_zoom("zoom-scribe-en-pro")
 
 
 # =============================================================================
@@ -850,7 +862,13 @@ STT_SERVICES: dict[str, ServiceDefinition] = {
     "zoom": ServiceDefinition(
         factory=create_zoom,
         vendor="Zoom",
-        model_label="N/A",
+        model_label="zoom-scribe-multilingual",
+        required_env_vars=["ZOOM_AI_API_KEY"],
+    ),
+    "zoom_scribe_en_pro": ServiceDefinition(
+        factory=create_zoom_scribe_en_pro,
+        vendor="Zoom",
+        model_label="zoom-scribe-en-pro",
         required_env_vars=["ZOOM_AI_API_KEY"],
     ),
 }

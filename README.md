@@ -54,7 +54,6 @@ Benchmark results on 1000 samples from the `pipecat-ai/smart-turn-data-v3.1-trai
 | Speechmatics | linden-1 | 99.5% | 83.9% | 1.11% | 0.96% | 369ms | 438ms | 690ms |
 | Speechmatics | N/A | 99.7% | 83.1% | 1.17% | 0.96% | 495ms | 676ms | 736ms |
 | xAI | grok-voice-transcribe-2.0 | 99.8% | 89.4% | 1.12% | 0.79% | 1322ms | 1895ms | 2148ms |
-| Zoom | zoom-scribe-en | 99.5% | 92.5% | 0.55% | 0.48% | 269ms | 368ms | 419ms |
 | Zoom | zoom-scribe-en-pro | 100.0% | 93.5% | 0.54% | 0.41% | 362ms | 572ms | 655ms |
 | Zoom | zoom-scribe-multilingual | 99.5% | 90.2% | 0.74% | 0.69% | 350ms | 526ms | 631ms |
 <!-- RESULTS_TABLE:END -->

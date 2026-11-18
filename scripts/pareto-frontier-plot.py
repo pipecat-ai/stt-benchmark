@@ -51,12 +51,15 @@ DEFAULT_LABEL_OFFSETS = {
         "Soniox stt-rt-v4": (-9, 4, "right"),
         "Soniox stt-rt-v5": (-9, -12, "right"),
         "Soniox stt-rt-v6": (-10, -10, "right"),
-        "AssemblyAI universal-3-5-pro": (8, 19, "left"),
-        "Cartesia ink-2": (8, -3, "left"),
+        "Rime": (8, 7, "left"),
+        "AssemblyAI universal-3-5-pro": (27, 16, "left"),
+        "Cartesia ink-2": (44, 1, "left"),
         "Speechmatics": (10, -2, "left"),
         "Speechmatics linden-1": (10, -9, "left"),
-        "AssemblyAI universal-3-6-pro": (8, -24, "left"),
+        "AssemblyAI universal-3-6-pro": (9, -14, "left"),
         "Meta": (10, 3, "left"),
+        "AssemblyAI stt-3-7-realtime-agent": (16, -3, "left"),
+        "Zoom": (11, -11, "left"),
     },
 }
 
@@ -180,7 +183,13 @@ def plot_pareto_frontier(
                 fontsize=7.5,
                 color=INK_2,
                 zorder=6,
-                arrowprops={**leader_line, "shrinkA": 1, "shrinkB": 5},
+                # Lead from the near end of the label, not its middle.
+                arrowprops={
+                    **leader_line,
+                    "shrinkA": 1,
+                    "shrinkB": 5,
+                    "relpos": (0 if ha == "left" else 1, 0.5),
+                },
             )
         else:
             texts.append(ax.text(ttfb, wer, name, fontsize=7.5, color=INK_2, zorder=6))
@@ -465,7 +474,8 @@ def get_data_from_readme(readme_path: Path) -> dict:
 
     Point labels are the vendor name when a vendor has a single row, or
     ``"{vendor} {model}"`` when a vendor ships multiple rows (so they don't
-    collide on the chart).
+    collide on the chart). A model name that starts with its vendor's name
+    drops that prefix, so the label doesn't say it twice.
     """
     from collections import Counter
 
@@ -479,7 +489,11 @@ def get_data_from_readme(readme_path: Path) -> dict:
     data = {}
     for r in rows:
         if vendor_counts[r["vendor"]] > 1 and r["model"] and r["model"].upper() != "N/A":
-            label = f"{r['vendor']} {r['model']}"
+            model = r["model"]
+            vendor_prefix = r["vendor"].lower().replace(" ", "") + "-"
+            if model.lower().startswith(vendor_prefix):
+                model = model[len(vendor_prefix) :]
+            label = f"{r['vendor']} {model}"
         else:
             label = r["vendor"]
         data[label] = {k: r[k] for k in (*METRIC_KEYS, *OPTIONAL_KEYS)}

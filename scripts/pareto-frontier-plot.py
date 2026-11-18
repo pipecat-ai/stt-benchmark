@@ -58,8 +58,10 @@ DEFAULT_LABEL_OFFSETS = {
         "Speechmatics linden-1": (10, -9, "left"),
         "AssemblyAI universal-3-6-pro": (9, -14, "left"),
         "Meta": (10, 3, "left"),
-        "AssemblyAI stt-3-7-realtime-agent": (16, -3, "left"),
-        "Zoom": (11, -11, "left"),
+        "AssemblyAI stt-3-7-realtime-agent": (16, -27, "left"),
+        "Zoom scribe-en": (10, -15.5, "left"),
+        "Zoom scribe-en-pro": (11, 0, "left"),
+        "Zoom scribe-multilingual": (14, -12.5, "left"),
     },
 }
 

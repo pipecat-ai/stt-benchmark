@@ -53,6 +53,7 @@ class ServiceName(StrEnum):
     WHISPER = "whisper"
     XAI = "xai"
     ZOOM = "zoom"
+    ZOOM_SCRIBE_EN = "zoom_scribe_en"
     ZOOM_SCRIBE_EN_PRO = "zoom_scribe_en_pro"
 
 

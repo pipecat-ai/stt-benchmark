@@ -44,8 +44,9 @@ string — not a marketing name. Pick it in this order:
    **If the vendor lets you choose a model, the factory must name one.** Don't
    leave the choice to the vendor's default: the default can change without
    notice, and the entry then no longer says what was measured. Zoom, for
-   example, picks a standard model when none is requested, so `create_zoom`
-   passes `zoom-scribe-multilingual` explicitly.
+   example, picks a standard model when none is requested, so each Zoom factory
+   passes its model ID explicitly. If you can't tell which model the default
+   is, ask the service: many report the model in their session reply.
 2. **The vendor exposes no selectable model** (AWS, Azure, fal, Speechmatics, …)
    → use `N/A`. `N/A` means there is nothing to choose, never "we used the
    default". These vendors serve one engine with no model string to pin; you'd

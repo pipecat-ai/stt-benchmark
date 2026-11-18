@@ -156,6 +156,22 @@ def create_assemblyai_universal_3_6_pro() -> FrameProcessor:
     )
 
 
+# assemblyai-stt-3-7-realtime-agent: supersedes the universal-3-6-pro entry above.
+def create_assemblyai_stt_3_7_realtime_agent() -> FrameProcessor:
+    from pipecat.services.assemblyai.stt import AssemblyAISTTService
+
+    return AssemblyAISTTService(
+        api_key=_get_env("ASSEMBLYAI_API_KEY"),
+        settings=AssemblyAISTTService.Settings(
+            model="assemblyai-stt-3-7-realtime-agent",
+            min_turn_silence=50,
+            vad_threshold=0.2,
+            language_codes=[Language.EN],
+        ),
+        vad_force_turn_endpoint=True,
+    )
+
+
 # AssemblyAI's Sync API: one request/response per speech segment rather than a
 # streaming WebSocket, so it runs as a SegmentedSTTService off the pipeline's VAD.
 # It's the same universal-3-5-pro model as create_assemblyai_universal_3_5_pro()
@@ -439,6 +455,16 @@ def create_openai_gpt_realtime_whisper() -> FrameProcessor:
     )
 
 
+# Rime transcribes one request per VAD speech segment and selects the model itself.
+def create_rime() -> FrameProcessor:
+    from pipecat.services.rime.stt import RimeSTTService
+
+    return RimeSTTService(
+        api_key=_get_env("RIME_API_KEY"),
+        settings=RimeSTTService.Settings(language="en"),
+    )
+
+
 def create_sarvam() -> FrameProcessor:
     from pipecat.services.sarvam.stt import SarvamSTTService
 
@@ -569,6 +595,18 @@ def create_xai() -> FrameProcessor:
     )
 
 
+# Zoom Scribe Live, with Scribe's own voice activity detection off: the pipeline's
+# VAD ends each turn, as it does for the other services measured here.
+def create_zoom() -> FrameProcessor:
+    from pipecat.services.zoom_ai.stt import ZoomAISTTService
+
+    return ZoomAISTTService(
+        api_key=_get_env("ZOOM_AI_API_KEY"),
+        settings=ZoomAISTTService.Settings(language=Language.EN_US),
+        vad_force_turn_endpoint=True,
+    )
+
+
 # =============================================================================
 # SERVICE REGISTRY
 # =============================================================================
@@ -595,6 +633,13 @@ STT_SERVICES: dict[str, ServiceDefinition] = {
         factory=create_assemblyai_universal_3_6_pro,
         vendor="AssemblyAI",
         model_label="universal-3-6-pro",
+        required_env_vars=["ASSEMBLYAI_API_KEY"],
+        is_current=False,  # superseded by assemblyai_stt_3_7_realtime_agent
+    ),
+    "assemblyai_stt_3_7_realtime_agent": ServiceDefinition(
+        factory=create_assemblyai_stt_3_7_realtime_agent,
+        vendor="AssemblyAI",
+        model_label="assemblyai-stt-3-7-realtime-agent",
         required_env_vars=["ASSEMBLYAI_API_KEY"],
     ),
     "assemblyai_sync": ServiceDefinition(
@@ -732,6 +777,12 @@ STT_SERVICES: dict[str, ServiceDefinition] = {
         model_label="gpt-4o-transcribe",
         required_env_vars=["OPENAI_API_KEY"],
     ),
+    "rime": ServiceDefinition(
+        factory=create_rime,
+        vendor="Rime",
+        model_label="N/A",
+        required_env_vars=["RIME_API_KEY"],
+    ),
     "sarvam": ServiceDefinition(
         factory=create_sarvam,
         vendor="Sarvam",
@@ -795,6 +846,12 @@ STT_SERVICES: dict[str, ServiceDefinition] = {
         vendor="xAI",
         model_label="grok-voice-transcribe-2.0",
         required_env_vars=["XAI_API_KEY"],
+    ),
+    "zoom": ServiceDefinition(
+        factory=create_zoom,
+        vendor="Zoom",
+        model_label="N/A",
+        required_env_vars=["ZOOM_AI_API_KEY"],
     ),
 }
 

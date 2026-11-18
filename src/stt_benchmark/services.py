@@ -613,6 +613,11 @@ def create_zoom() -> FrameProcessor:
     return _create_zoom("zoom-scribe-multilingual")
 
 
+# zoom-scribe-en: Scribe's standard English model.
+def create_zoom_scribe_en() -> FrameProcessor:
+    return _create_zoom("zoom-scribe-en")
+
+
 # zoom-scribe-en-pro: Scribe's premium English model; the key needs premium-model
 # access. A separate tier from the standard models, not a successor to them.
 def create_zoom_scribe_en_pro() -> FrameProcessor:
@@ -863,6 +868,12 @@ STT_SERVICES: dict[str, ServiceDefinition] = {
         factory=create_zoom,
         vendor="Zoom",
         model_label="zoom-scribe-multilingual",
+        required_env_vars=["ZOOM_AI_API_KEY"],
+    ),
+    "zoom_scribe_en": ServiceDefinition(
+        factory=create_zoom_scribe_en,
+        vendor="Zoom",
+        model_label="zoom-scribe-en",
         required_env_vars=["ZOOM_AI_API_KEY"],
     ),
     "zoom_scribe_en_pro": ServiceDefinition(

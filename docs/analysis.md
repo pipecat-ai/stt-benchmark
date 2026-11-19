@@ -246,6 +246,8 @@ uv run stt-benchmark wer --force-recalculate
 | 500-800ms | Fair - noticeable latency |
 | > 800ms | Poor - may cause conversation flow issues |
 
+Read these ranges against the median for a service that signals when a transcript is complete, and against the P99 for one that doesn't: without the signal, an agent waits out the P99 on every turn. See [What This Benchmark Measures](../README.md#what-this-benchmark-measures).
+
 ### Semantic WER
 
 | WER Range | Assessment |

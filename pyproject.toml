@@ -13,7 +13,7 @@ requires-python = ">=3.11"
 keywords = ["stt", "speech-to-text", "benchmark", "ttfb", "pipecat", "latency"]
 dependencies = [
     # Pipecat with STT providers
-    "pipecat-ai[assemblyai,aws,azure,cartesia,deepgram,elevenlabs,fal,gladia,google,gradium,groq,meta,mistral,nvidia,openai,sagemaker,sarvam,smallest,soniox,speechmatics,whisper,silero,soundfile,xai]>=1.12.0,<2",
+    "pipecat-ai[assemblyai,aws,azure,cartesia,deepgram,elevenlabs,fal,gladia,google,gradium,groq,meta,mistral,nvidia,openai,runner,sagemaker,sarvam,smallest,soniox,speechmatics,websocket,whisper,silero,soundfile,xai]>=1.16.0,<2",
     # Dataset handling
     "datasets>=2.16.0,<3.0.0",
     "scipy>=1.11.0",
@@ -29,6 +29,7 @@ dependencies = [
     "loguru>=0.7.0",
     "numpy>=1.26.0",
     "aiohttp>=3.9.0",
+    "pyyaml>=6.0",
     "librosa",
     # Semantic WER evaluation (Claude)
     "anthropic>=0.76.0",
@@ -51,6 +52,12 @@ dev = [
     "pytest-asyncio>=0.23.0",
     "ruff>=0.1.0",
 ]
+
+# Development only: the eval harness changes this port needs are on a pipecat
+# branch that is not released yet. Remove once they ship, and raise the
+# pipecat-ai lower bound above to that release.
+[tool.uv.sources]
+pipecat-ai = { path = "../pipecat", editable = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/stt_benchmark"]

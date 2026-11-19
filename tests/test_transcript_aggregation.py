@@ -9,17 +9,27 @@ computed against a truncated hypothesis.
 import asyncio
 from collections.abc import AsyncGenerator
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
-from pipecat.frames.frames import Frame, TranscriptionFrame, VADUserStoppedSpeakingFrame
+from pipecat.audio.dtmf.types import KeypadEntry
+from pipecat.frames.frames import (
+    Frame,
+    InputAudioRawFrame,
+    InputDTMFFrame,
+    StartFrame,
+    TranscriptionFrame,
+    VADUserStoppedSpeakingFrame,
+)
+from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
+from pipecat.processors.frameworks.rtvi import RTVIServerMessageFrame
 from pipecat.services.stt_service import STTService
 from pipecat.utils.time import time_now_iso8601
+from pipecat.workers.runner import WorkerRunner
 
 from stt_benchmark.config import get_config
-from stt_benchmark.models import AudioSample, ServiceName
+from stt_benchmark.evals.bot import build_worker
+from stt_benchmark.evals.collector import SampleResult
 from stt_benchmark.observers.transcription_collector import TranscriptionCollectorObserver
-from stt_benchmark.pipeline.benchmark_runner import BenchmarkRunner
 
 SEGMENTS = ["Hello there,", "how are you", "doing today?"]
 EXPECTED = "Hello there, how are you doing today?"
@@ -89,7 +99,62 @@ class MultiSegmentSTT(STTService):
                 await asyncio.sleep(self._gap)
 
 
-def _first_sample() -> AudioSample:
+class ReconnectingSTT(MultiSegmentSTT):
+    """Mock STT that reports a connection error as it starts, then carries on."""
+
+    async def start(self, frame: StartFrame):
+        await super().start(frame)
+        await self.push_error(error_msg="connection error: timed out")
+
+
+class HarnessAudio(FrameProcessor):
+    """Stands in for the eval harness: plays a sample in real time, marks its end, then silence."""
+
+    CHUNK_MS = 20
+
+    def __init__(self, audio: bytes, sample_rate: int):
+        super().__init__()
+        self._audio = audio
+        self._sample_rate = sample_rate
+        self._playing: asyncio.Task | None = None
+
+    async def process_frame(self, frame: Frame, direction: FrameDirection):
+        await super().process_frame(frame, direction)
+        await self.push_frame(frame, direction)
+        if isinstance(frame, StartFrame):
+            self._playing = self.create_task(self._play())
+
+    async def _play(self):
+        chunk = int(self._sample_rate * self.CHUNK_MS / 1000) * 2
+        offset = 0
+        marked = False
+        while True:
+            if offset >= len(self._audio) and not marked:
+                await self.push_frame(InputDTMFFrame(button=KeypadEntry.POUND))
+                marked = True
+            audio = self._audio[offset : offset + chunk].ljust(chunk, b"\x00")
+            offset += chunk
+            await self.push_frame(
+                InputAudioRawFrame(audio=audio, sample_rate=self._sample_rate, num_channels=1)
+            )
+            await asyncio.sleep(self.CHUNK_MS / 1000)
+
+
+class MessageSink(FrameProcessor):
+    """Stands in for the transport's output: keeps the server messages the bot sends."""
+
+    def __init__(self):
+        super().__init__()
+        self.messages: list = []
+
+    async def process_frame(self, frame: Frame, direction: FrameDirection):
+        await super().process_frame(frame, direction)
+        if isinstance(frame, RTVIServerMessageFrame):
+            self.messages.append(frame.data)
+        await self.push_frame(frame, direction)
+
+
+def _sample_audio() -> bytes:
     """A real dataset sample, so Silero VAD sees actual speech."""
     import sqlite3
 
@@ -100,39 +165,57 @@ def _first_sample() -> AudioSample:
     conn = sqlite3.connect(db_path)
     try:
         row = conn.execute(
-            "SELECT sample_id, audio_path, duration_seconds, dataset_index FROM samples "
-            "WHERE duration_seconds BETWEEN 2 AND 5 LIMIT 1"
+            "SELECT audio_path FROM samples WHERE duration_seconds BETWEEN 2 AND 5 LIMIT 1"
         ).fetchone()
     finally:
         conn.close()
 
-    if not row or not Path(row[1]).exists():
+    if not row or not Path(row[0]).exists():
         pytest.skip("no audio samples available locally")
 
-    return AudioSample(
-        sample_id=row[0], audio_path=row[1], duration_seconds=row[2], dataset_index=row[3]
+    return Path(row[0]).read_bytes()
+
+
+async def _run_with_mock(
+    segments: list[str], gap: float, stt_class: type[MultiSegmentSTT] = MultiSegmentSTT
+) -> tuple[SampleResult, list]:
+    """Run the bot's pipeline on a sample, with a mock STT, as the harness would drive it."""
+    config = get_config()
+    sink = MessageSink()
+    worker, report_sample = build_worker(
+        HarnessAudio(_sample_audio(), config.sample_rate),
+        stt_class(segments=segments, gap=gap),
+        sink,
+        vad_stop_secs=config.vad_stop_secs,
     )
-
-
-async def _run_with_mock(segments: list[str], gap: float):
-    service = MultiSegmentSTT(segments=segments, gap=gap)
-    with patch("stt_benchmark.pipeline.benchmark_runner.create_stt_service", return_value=service):
-        return await BenchmarkRunner().benchmark_sample(_first_sample(), ServiceName.DEEPGRAM)
+    runner = WorkerRunner(handle_sigint=False)
+    await runner.add_workers(worker)
+    running = asyncio.create_task(runner.run())
+    try:
+        result = await asyncio.wait_for(report_sample(), timeout=40)
+        # Let the message travel down the pipeline to the sink.
+        await asyncio.sleep(0.2)
+    finally:
+        await runner.cancel()
+        await asyncio.gather(running, return_exceptions=True)
+    return result, sink.messages
 
 
 @pytest.mark.parametrize("gap", [0.1, 0.8])
 async def test_pipeline_aggregates_multiple_segments(gap):
     """End-to-end: every segment inside the collection window reaches the result."""
-    result = await _run_with_mock(SEGMENTS, gap)
+    result, messages = await _run_with_mock(SEGMENTS, gap)
 
-    assert result.error is None
     assert result.transcription == EXPECTED
+    assert not result.capped
+    # The harness gets the same result, as the bot's one server message.
+    assert messages == [result.as_message()]
 
 
 async def test_ttfs_measures_to_the_last_segment():
     """TTFS must reflect the final segment, not the first one."""
     gap = 0.4
-    result = await _run_with_mock(SEGMENTS, gap)
+    result, _ = await _run_with_mock(SEGMENTS, gap)
 
     # Two gaps between three segments, so the last segment lands ~0.8s after
     # the first. TTFS should be well past the first segment's arrival.
@@ -143,11 +226,17 @@ async def test_ttfs_measures_to_the_last_segment():
 async def test_slowly_trickling_segments_are_collected():
     """Segments keep the window open, up to the collection deadline.
 
-    This used to be the known limit of the design: collection stopped a fixed
-    2s after the *first* segment, so anything still in flight was lost. The
-    window now follows the service and closes only once it has gone quiet, or
+    Collection follows the service and closes only once it has gone quiet, or
     once the deadline after the end of speech passes -- whichever comes first.
     """
-    result = await _run_with_mock(SEGMENTS, gap=1.5)
+    result, _ = await _run_with_mock(SEGMENTS, gap=1.5)
 
     assert result.transcription == EXPECTED
+
+
+async def test_an_stt_error_fails_the_sample_even_when_transcripts_arrive():
+    """A service that reconnected may have lost audio; its transcript is not scored."""
+    result, messages = await _run_with_mock(SEGMENTS, gap=0.1, stt_class=ReconnectingSTT)
+
+    assert result.error == "connection error: timed out"
+    assert messages[0]["error"] == "connection error: timed out"

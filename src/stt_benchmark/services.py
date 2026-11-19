@@ -246,6 +246,21 @@ def create_deepgram() -> FrameProcessor:
     )
 
 
+# flux-general-en: Deepgram's conversational model, which normally decides for
+# itself when a turn has ended. Here that is turned over to the pipeline's VAD, as
+# for the other services measured: each VAD stop sends Flux a ForceEndTurn, and
+# Flux answers with the turn's complete transcript. A separate product from
+# nova-3-general, not a successor to it.
+def create_deepgram_flux_general_en() -> FrameProcessor:
+    from pipecat.services.deepgram.flux.stt import DeepgramFluxSTTService
+
+    return DeepgramFluxSTTService(
+        api_key=_get_env("DEEPGRAM_API_KEY"),
+        settings=DeepgramFluxSTTService.Settings(model="flux-general-en"),
+        vad_force_turn_endpoint=True,
+    )
+
+
 def create_elevenlabs() -> FrameProcessor:
     from pipecat.services.elevenlabs.stt import ElevenLabsRealtimeSTTService
 
@@ -695,6 +710,12 @@ STT_SERVICES: dict[str, ServiceDefinition] = {
         factory=create_deepgram,
         vendor="Deepgram",
         model_label="nova-3-general",
+        required_env_vars=["DEEPGRAM_API_KEY"],
+    ),
+    "deepgram_flux_general_en": ServiceDefinition(
+        factory=create_deepgram_flux_general_en,
+        vendor="Deepgram",
+        model_label="flux-general-en",
         required_env_vars=["DEEPGRAM_API_KEY"],
     ),
     "elevenlabs": ServiceDefinition(

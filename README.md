@@ -1,6 +1,24 @@
 # STT Benchmark
 
-A framework for benchmarking Speech-to-Text services with TTFS (Time To Final Segment) latency and Semantic WER (Word Error Rate) accuracy measurement.
+A benchmark of streaming Speech-to-Text services for real-time voice agents. It measures how accurate each service's transcripts are (Semantic WER) and how soon after the user stops speaking the complete transcript arrives (TTFS, Time To Final Segment).
+
+## What This Benchmark Measures
+
+In a voice agent, the STT service sits between the user's audio and the LLM. The agent can't start its reply until it has the complete transcript of what the user just said, so two things decide whether an STT service works well there:
+
+- **Accuracy.** Are the words right in the ways that change what the LLM understands? This is [Semantic WER](#semantic-wer).
+- **Latency to the complete transcript.** How long after the user stops speaking does the last piece of the transcript arrive? This is [TTFS](#ttfs-measurement).
+
+Every service is measured in the same position it holds in an agent: inside a [Pipecat](https://github.com/pipecat-ai/pipecat) pipeline, receiving audio in real time over a live connection, with a local VAD deciding when the user has stopped speaking. Each sample is one user turn.
+
+**Reading TTFS.** TTFS is when the complete transcript arrived. An agent can act at that moment only if it knows the transcript is complete, and that depends on the service:
+
+- A service that **signals completion** (it marks the last transcript for a turn as final) lets the agent move on as soon as that transcript arrives. The agent's wait is the TTFS of that turn, so the median is what users typically experience.
+- A service that **gives no signal** leaves the agent guessing whether more text is coming. The agent has to wait a fixed time long enough to cover nearly every turn, in practice the service's TTFS P99, on every turn. For these services the P99 column is the latency users experience, not the median.
+
+Two services with the same median can therefore feel very different in an agent: one responds at its median, the other at its P99. The benchmark itself records TTFS the same way for both, after the fact; see [TTFS Measurement](#ttfs-measurement).
+
+**What it doesn't measure.** The service's own turn detection is left out; the pipeline's VAD ends each turn for every service. Samples are single English utterances, so the results say nothing about other languages, long-form audio, or multi-speaker audio. Latency is measured from one network location and includes the network path to each service.
 
 ## Results Summary
 
@@ -68,13 +86,13 @@ For production voice agents, **tail latency matters more than median**. Even occ
 | **Perfect** | Transcriptions with 0% semantic WER, out of the samples with a transcription |
 | **WER Mean** | Average semantic word error rate across samples |
 | **Pooled WER** | Weighted WER (total errors / total reference words) |
-| **TTFS Median** | Median time from user stops speaking to final transcription segment |
+| **TTFS Median** | Median time from when the user stops speaking to when the last transcription segment for the turn arrives |
 | **TTFS P95** | 95th percentile TTFS - worst 5% of samples have latency above this |
 | **TTFS P99** | 99th percentile TTFS - worst 1% of samples have latency above this |
 
 > **Semantic WER** measures only transcription errors that would impact an LLM agent's understanding. Punctuation, contractions, filler words, and equivalent phrasings are ignored.
 
-> **TTFS (Time To Final Segment)** is measured from when the user stops speaking to when the final transcription segment is received. For streaming voice agents, lower TTFS means faster response times.
+> **TTFS (Time To Final Segment)** is measured from when the user stops speaking to when the last transcription segment for that turn is received: the moment the transcript is complete. Which percentile matters depends on the service; see [Reading TTFS](#what-this-benchmark-measures).
 
 ## Contributing a Result
 
@@ -161,7 +179,7 @@ Samples run one at a time unless you ask for more with `--concurrency`; see [Con
 
 ### TTFS Measurement
 
-**TTFS for STT is different from typical request/response latency.** Since STT services receive continuous audio input, there's no discrete request to measure from. Instead, we measure from when the user **stops speaking** to when the **final transcription** arrives.
+**TTFS for STT is different from typical request/response latency.** Since STT services receive continuous audio input, there's no discrete request to measure from. Instead, we measure from when the user **stops speaking** to when the **last transcript for that turn** arrives. That is the moment the agent has everything the user said.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -175,7 +193,7 @@ Samples run one at a time unless you ask for more with `--concurrency`; see [Con
 │         │                              │                  │                 │
 │         │                              └──── TTFS ────────┼────────►        │
 │         │                           speech_end_time       │     T3          │
-│         │                                                 │  (final         │
+│         │                                                 │  (last          │
 │         │     T1              T2                          │ transcript)     │
 │         │      │               │                          │                 │
 │         │      ▼               ▼                          │                 │
@@ -185,10 +203,17 @@ Samples run one at a time unless you ask for more with `--concurrency`; see [Con
 
 **Key points:**
 - `speech_end_time` = `VADUserStoppedSpeakingFrame` timestamp − VAD `stop_secs`
-- TTFS = final `TranscriptionFrame` receipt time − `speech_end_time`
-- Streaming services emit multiple partial transcripts; we use the **final** one
+- TTFS = last `TranscriptionFrame` receipt time − `speech_end_time`
+- Streaming services emit several transcripts for one turn; we use the **last** one
 
-**Why the final transcript?** For LLM/TTS, there's a discrete input→output making latency measurement simple. For streaming STT, audio flows continuously and generates multiple `TranscriptionFrame`s. We can't know when the STT service finalized audio for intermediate transcripts, so we measure from the final one and use the VAD signal to determine when the user actually stopped speaking.
+**Why the last transcript?** An agent that replied after an earlier one would be answering part of what the user said, so the turn's latency is set by the last one.
+
+**How the last transcript is identified.** There are two cases, and they give the same measurement:
+
+- **The service signals completion.** When the VAD reports the end of speech, Pipecat asks the service to finish the turn, where the service supports it. The service's reply confirms that the transcript is complete, and Pipecat marks that transcript as finalized. TTFS is reported as soon as it arrives.
+- **The service gives no signal.** Pipecat waits 2 seconds after the VAD reports the end of speech and takes the last transcript that arrived in that window. TTFS is the time that transcript arrived, not the end of the wait.
+
+The benchmark can wait and look back; a live agent can't, which is why the signal changes how the results should be read. See [Reading TTFS](#what-this-benchmark-measures).
 
 ### Semantic WER
 

@@ -117,8 +117,9 @@ def plot_pareto_frontier(
     fig.patch.set_facecolor(SURFACE)
     ax.set_facecolor(SURFACE)
 
-    # Pareto frontier: a soft highlight band through the optimal points,
-    # plus a halo ring on each one.
+    # Pareto frontier: a thin line through the optimal points, plus a ring on
+    # each one. The line is kept thin so that it can't appear to take in a
+    # nearby point that isn't on the frontier.
     frontier_ttfb = [p[1] for p in pareto_optimal]
     frontier_wer = [p[2] for p in pareto_optimal]
     if len(pareto_optimal) > 1:
@@ -126,8 +127,8 @@ def plot_pareto_frontier(
             frontier_ttfb,
             frontier_wer,
             color=BAND,
-            alpha=0.22,
-            linewidth=30,
+            alpha=0.6,
+            linewidth=1.8,
             solid_capstyle="round",
             solid_joinstyle="round",
             zorder=1,
@@ -143,15 +144,19 @@ def plot_pareto_frontier(
         zorder=4,
     )
 
-    # All services: one hue, ring in the surface color for separation. Rows
-    # scored by the previous judge are drawn hollow.
+    # All services: ring in the surface color for separation. Frontier
+    # services take the frontier's color, so one that sits beside an ordinary
+    # service still reads apart from it. Rows scored by the previous judge are
+    # drawn hollow.
+    on_frontier = {p[0] for p in pareto_optimal}
+    dot_colors = [BAND if n in on_frontier else DOT for n in names]
     previous = [bool(data[n].get("previous_judge")) for n in names]
     current = [i for i, p in enumerate(previous) if not p]
     ax.scatter(
         [ttfb_values[i] for i in current],
         [wer_values[i] for i in current],
         s=55,
-        color=DOT,
+        color=[dot_colors[i] for i in current],
         edgecolors=SURFACE,
         linewidths=1.2,
         zorder=5,
@@ -163,7 +168,7 @@ def plot_pareto_frontier(
             [wer_values[i] for i in previous_idx],
             s=55,
             facecolors=SURFACE,
-            edgecolors=DOT,
+            edgecolors=[dot_colors[i] for i in previous_idx],
             linewidths=1.5,
             zorder=5,
         )
@@ -239,10 +244,13 @@ def plot_pareto_frontier(
                 [],
                 [],
                 color=BAND,
-                alpha=0.35,
-                linewidth=12,
-                solid_capstyle="round",
-                label="Pareto frontier",
+                alpha=0.85,
+                linewidth=1.8,
+                marker="o",
+                markersize=6,
+                markerfacecolor=BAND,
+                markeredgecolor=BAND,
+                label="On the Pareto frontier",
             ),
             *(
                 [
@@ -253,7 +261,7 @@ def plot_pareto_frontier(
                         markersize=7,
                         linestyle="None",
                         markerfacecolor=SURFACE,
-                        markeredgecolor=DOT,
+                        markeredgecolor=INK_2,
                         label=f"Scored by the previous judge ({PREVIOUS_JUDGE_MARK})",
                     )
                 ]

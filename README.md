@@ -71,7 +71,7 @@ Small WER differences aren't meaningful on this data. Among the most accurate se
 
 ![STT Service Pareto Frontier - Median](assets/stt_pareto_frontier.png)
 
-The Pareto frontier shows services that offer the best trade-off between latency and accuracy—no other service is better on both metrics. Services on the frontier represent efficient choices depending on your priorities.
+The Pareto frontier shows services that offer the best trade-off between latency and accuracy—no other service is better on both metrics. Services on the frontier represent efficient choices depending on your priorities. They are drawn in green and joined by a line; a blue point is not on the frontier, however close it sits to one that is.
 
 Each point is a service's pooled WER. Points close together on the WER axis may not differ meaningfully; see the note under the [results table](#results-summary).
 

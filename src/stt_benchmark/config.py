@@ -43,11 +43,13 @@ class BenchmarkConfig(BaseSettings):
     nvidia_api_key: str = Field(default="", alias="NVIDIA_API_KEY")
     openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")
     sagemaker_asr_endpoint_name: str = Field(default="", alias="SAGEMAKER_ASR_ENDPOINT_NAME")
+    rime_api_key: str = Field(default="", alias="RIME_API_KEY")
     sarvam_api_key: str = Field(default="", alias="SARVAM_API_KEY")
     smallest_api_key: str = Field(default="", alias="SMALLEST_API_KEY")
     soniox_api_key: str = Field(default="", alias="SONIOX_API_KEY")
     speechmatics_api_key: str = Field(default="", alias="SPEECHMATICS_API_KEY")
     xai_api_key: str = Field(default="", alias="XAI_API_KEY")
+    zoom_ai_api_key: str = Field(default="", alias="ZOOM_AI_API_KEY")
 
     # AWS credentials
     aws_access_key_id: str = Field(default="", alias="AWS_ACCESS_KEY_ID")

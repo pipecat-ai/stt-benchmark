@@ -17,6 +17,7 @@ class ServiceName(StrEnum):
     ASSEMBLYAI = "assemblyai"
     ASSEMBLYAI_UNIVERSAL_3_5_PRO = "assemblyai_universal_3_5_pro"
     ASSEMBLYAI_UNIVERSAL_3_6_PRO = "assemblyai_universal_3_6_pro"
+    ASSEMBLYAI_STT_3_7_REALTIME_AGENT = "assemblyai_stt_3_7_realtime_agent"
     ASSEMBLYAI_SYNC = "assemblyai_sync"
     AWS = "aws"
     AZURE = "azure"
@@ -40,6 +41,7 @@ class ServiceName(StrEnum):
     OPENAI_GPT_LIVE_TRANSCRIBE = "openai_gpt_live_transcribe"
     OPENAI_GPT_REALTIME_WHISPER = "openai_gpt_realtime_whisper"
     OPENAI_REALTIME = "openai_realtime"
+    RIME = "rime"
     SARVAM = "sarvam"
     SARVAM_SAARAS_V4 = "sarvam_saaras_v4"
     SMALLEST = "smallest"
@@ -50,6 +52,9 @@ class ServiceName(StrEnum):
     SONIOX_STT_RT_V6 = "soniox_stt_rt_v6"
     WHISPER = "whisper"
     XAI = "xai"
+    ZOOM = "zoom"
+    ZOOM_SCRIBE_EN = "zoom_scribe_en"
+    ZOOM_SCRIBE_EN_PRO = "zoom_scribe_en_pro"
 
 
 class AudioSample(BaseModel):

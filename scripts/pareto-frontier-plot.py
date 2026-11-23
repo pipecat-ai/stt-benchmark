@@ -51,12 +51,17 @@ DEFAULT_LABEL_OFFSETS = {
         "Soniox stt-rt-v4": (-9, 4, "right"),
         "Soniox stt-rt-v5": (-9, -12, "right"),
         "Soniox stt-rt-v6": (-10, -10, "right"),
-        "AssemblyAI universal-3-5-pro": (8, 19, "left"),
-        "Cartesia ink-2": (8, -3, "left"),
+        "Rime": (8, 7, "left"),
+        "AssemblyAI universal-3-5-pro": (27, 16, "left"),
+        "Cartesia ink-2": (44, 1, "left"),
         "Speechmatics": (10, -2, "left"),
         "Speechmatics linden-1": (10, -9, "left"),
-        "AssemblyAI universal-3-6-pro": (8, -24, "left"),
+        "AssemblyAI universal-3-6-pro": (9, -14, "left"),
         "Meta": (10, 3, "left"),
+        "AssemblyAI stt-3-7-realtime-agent": (16, -27, "left"),
+        "Zoom scribe-en": (10, -21.5, "left"),
+        "Zoom scribe-en-pro": (11, 0, "left"),
+        "Zoom scribe-multilingual": (14, -12.5, "left"),
     },
 }
 
@@ -112,8 +117,9 @@ def plot_pareto_frontier(
     fig.patch.set_facecolor(SURFACE)
     ax.set_facecolor(SURFACE)
 
-    # Pareto frontier: a soft highlight band through the optimal points,
-    # plus a halo ring on each one.
+    # Pareto frontier: a thin line through the optimal points, plus a ring on
+    # each one. The line is kept thin so that it can't appear to take in a
+    # nearby point that isn't on the frontier.
     frontier_ttfb = [p[1] for p in pareto_optimal]
     frontier_wer = [p[2] for p in pareto_optimal]
     if len(pareto_optimal) > 1:
@@ -121,8 +127,8 @@ def plot_pareto_frontier(
             frontier_ttfb,
             frontier_wer,
             color=BAND,
-            alpha=0.22,
-            linewidth=30,
+            alpha=0.6,
+            linewidth=1.8,
             solid_capstyle="round",
             solid_joinstyle="round",
             zorder=1,
@@ -138,15 +144,19 @@ def plot_pareto_frontier(
         zorder=4,
     )
 
-    # All services: one hue, ring in the surface color for separation. Rows
-    # scored by the previous judge are drawn hollow.
+    # All services: ring in the surface color for separation. Frontier
+    # services take the frontier's color, so one that sits beside an ordinary
+    # service still reads apart from it. Rows scored by the previous judge are
+    # drawn hollow.
+    on_frontier = {p[0] for p in pareto_optimal}
+    dot_colors = [BAND if n in on_frontier else DOT for n in names]
     previous = [bool(data[n].get("previous_judge")) for n in names]
     current = [i for i, p in enumerate(previous) if not p]
     ax.scatter(
         [ttfb_values[i] for i in current],
         [wer_values[i] for i in current],
         s=55,
-        color=DOT,
+        color=[dot_colors[i] for i in current],
         edgecolors=SURFACE,
         linewidths=1.2,
         zorder=5,
@@ -158,7 +168,7 @@ def plot_pareto_frontier(
             [wer_values[i] for i in previous_idx],
             s=55,
             facecolors=SURFACE,
-            edgecolors=DOT,
+            edgecolors=[dot_colors[i] for i in previous_idx],
             linewidths=1.5,
             zorder=5,
         )
@@ -180,7 +190,13 @@ def plot_pareto_frontier(
                 fontsize=7.5,
                 color=INK_2,
                 zorder=6,
-                arrowprops={**leader_line, "shrinkA": 1, "shrinkB": 5},
+                # Lead from the near end of the label, not its middle.
+                arrowprops={
+                    **leader_line,
+                    "shrinkA": 1,
+                    "shrinkB": 5,
+                    "relpos": (0 if ha == "left" else 1, 0.5),
+                },
             )
         else:
             texts.append(ax.text(ttfb, wer, name, fontsize=7.5, color=INK_2, zorder=6))
@@ -228,10 +244,13 @@ def plot_pareto_frontier(
                 [],
                 [],
                 color=BAND,
-                alpha=0.35,
-                linewidth=12,
-                solid_capstyle="round",
-                label="Pareto frontier",
+                alpha=0.85,
+                linewidth=1.8,
+                marker="o",
+                markersize=6,
+                markerfacecolor=BAND,
+                markeredgecolor=BAND,
+                label="On the Pareto frontier",
             ),
             *(
                 [
@@ -242,7 +261,7 @@ def plot_pareto_frontier(
                         markersize=7,
                         linestyle="None",
                         markerfacecolor=SURFACE,
-                        markeredgecolor=DOT,
+                        markeredgecolor=INK_2,
                         label=f"Scored by the previous judge ({PREVIOUS_JUDGE_MARK})",
                     )
                 ]
@@ -465,7 +484,8 @@ def get_data_from_readme(readme_path: Path) -> dict:
 
     Point labels are the vendor name when a vendor has a single row, or
     ``"{vendor} {model}"`` when a vendor ships multiple rows (so they don't
-    collide on the chart).
+    collide on the chart). A model name that starts with its vendor's name
+    drops that prefix, so the label doesn't say it twice.
     """
     from collections import Counter
 
@@ -479,7 +499,11 @@ def get_data_from_readme(readme_path: Path) -> dict:
     data = {}
     for r in rows:
         if vendor_counts[r["vendor"]] > 1 and r["model"] and r["model"].upper() != "N/A":
-            label = f"{r['vendor']} {r['model']}"
+            model = r["model"]
+            vendor_prefix = r["vendor"].lower().replace(" ", "") + "-"
+            if model.lower().startswith(vendor_prefix):
+                model = model[len(vendor_prefix) :]
+            label = f"{r['vendor']} {model}"
         else:
             label = r["vendor"]
         data[label] = {k: r[k] for k in (*METRIC_KEYS, *OPTIONAL_KEYS)}

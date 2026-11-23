@@ -1,6 +1,6 @@
 # Measuring TTFS for Your STT Service
 
-TTFS (Time To Final Segment) measures the time from when the user stops speaking to when the final transcription segment arrives. This is the latency that directly impacts how fast your voice agent can respond.
+TTFS (Time To Final Segment) measures the time from when the user stops speaking to when the last transcription segment for that turn arrives: the moment your agent has the complete transcript. This is the latency that directly impacts how fast your voice agent can respond.
 
 This guide covers running the TTFS benchmark for your own STT service, configuration, and network location. No ground truth or WER evaluation needed, just the latency measurement.
 
@@ -43,14 +43,14 @@ stt = DeepgramSTTService(
 
 For LLM and TTS services, latency is straightforward: discrete input in, output out. Streaming STT works differently, audio flows continuously to the provider, which generates multiple transcription segments over time.
 
-We can't measure when the STT service finalized audio for intermediate transcripts, so we measure from the **last** transcription segment received. The two reference points are:
+An agent that replied after an earlier segment would be answering part of what the user said, so we measure to the **last** transcription segment received for the turn. The two reference points are:
 
 1. **Speech end time**: The VAD stop-speaking event minus the VAD stop delay — the moment the user actually stopped speaking
 2. **Final transcript receipt time**: When the last transcription segment arrives
 
 TTFS = final transcript receipt time − speech end time
 
-See the [README](../README.md#ttfs-measurement) for a detailed diagram.
+If the service signals that the transcript is complete, the last segment is the one it marks as final. If it doesn't, the last segment is the latest one to arrive within 2 seconds of the VAD reporting the end of speech. See the [README](../README.md#ttfs-measurement) for a detailed diagram.
 
 ## Options
 
@@ -70,6 +70,16 @@ The default VAD stop threshold is 0.2 seconds, which works very well in all of o
 ```bash
 uv run stt-benchmark run --services deepgram --vad-stop-secs 0.3
 ```
+
+### Running faster
+
+Samples run one at a time by default, so that nothing else on the machine affects the latency being measured. To get through a large run faster, run several at once:
+
+```bash
+uv run stt-benchmark run --services deepgram --concurrency 8
+```
+
+What your machine can take depends on its CPU, so if you plan to use the numbers, compare a small run at `--concurrency 1` with one at your chosen level first. See [Concurrency](cli.md#concurrency) for details.
 
 ### Multiple services
 
@@ -98,9 +108,12 @@ The report shows three latency percentiles:
 | **TTFS P95** | Worst 5% of interactions have latency above this value |
 | **TTFS P99** | Worst 1% of interactions have latency above this value |
 
-For production voice agents, **P95 is the most important number**. It characterizes the worst-case latency your users will regularly encounter. Median describes the average experience, but P95 tells you how long your agent needs to wait to be confident the final transcript has arrived.
+Which number matters most depends on whether your service signals that a transcript is complete:
 
-Services that support **finalization** (confirming receipt of the final transcript via metadata) can reduce effective latency, since your application gets an explicit signal rather than waiting out a timeout window. See the main README for more on how TTFS measurement works.
+- **With a completion signal** (finalization), your agent moves on as soon as the finalized transcript arrives. Users experience the TTFS of each turn: typically the median, occasionally the P95 or P99.
+- **Without one**, your agent can't tell whether more text is coming, so it waits a fixed time on every turn. That time is the `ttfs_p99_latency` you configure, so users experience roughly the P99 on every turn, whatever the median is.
+
+Either way, set `ttfs_p99_latency` from the P99 this tool reports: it is how long the agent waits when no finalized transcript arrives. See the main README for more on [how TTFS measurement works](../README.md#ttfs-measurement).
 
 ## Supported Services
 

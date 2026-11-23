@@ -1,6 +1,24 @@
 # STT Benchmark
 
-A framework for benchmarking Speech-to-Text services with TTFS (Time To Final Segment) latency and Semantic WER (Word Error Rate) accuracy measurement.
+A benchmark of streaming Speech-to-Text services for real-time voice agents. It measures how accurate each service's transcripts are (Semantic WER) and how soon after the user stops speaking the complete transcript arrives (TTFS, Time To Final Segment).
+
+## What This Benchmark Measures
+
+In a voice agent, the STT service sits between the user's audio and the LLM. The agent can't start its reply until it has the complete transcript of what the user just said, so two things decide whether an STT service works well there:
+
+- **Accuracy.** Are the words right in the ways that change what the LLM understands? This is [Semantic WER](#semantic-wer).
+- **Latency to the complete transcript.** How long after the user stops speaking does the last piece of the transcript arrive? This is [TTFS](#ttfs-measurement).
+
+Every service is measured in the same position it holds in an agent: inside a [Pipecat](https://github.com/pipecat-ai/pipecat) pipeline, receiving audio in real time over a live connection, with a local VAD deciding when the user has stopped speaking. Each sample is one user turn.
+
+**Reading TTFS.** TTFS is when the complete transcript arrived. An agent can act at that moment only if it knows the transcript is complete, and that depends on the service:
+
+- A service that **signals completion** (it marks the last transcript for a turn as final) lets the agent move on as soon as that transcript arrives. The agent's wait is the TTFS of that turn, so the median is what users typically experience.
+- A service that **gives no signal** leaves the agent guessing whether more text is coming. The agent has to wait a fixed time long enough to cover nearly every turn, in practice the service's TTFS P99, on every turn. For these services the P99 column is the latency users experience, not the median.
+
+Two services with the same median can therefore feel very different in an agent: one responds at its median, the other at its P99. The benchmark itself records TTFS the same way for both, after the fact; see [TTFS Measurement](#ttfs-measurement).
+
+**What it doesn't measure.** The service's own turn detection is left out; the pipeline's VAD ends each turn for every service. Samples are single English utterances, so the results say nothing about other languages, long-form audio, or multi-speaker audio. Latency is measured from one network location and includes the network path to each service.
 
 ## Results Summary
 
@@ -64,17 +82,17 @@ For production voice agents, **tail latency matters more than median**. Even occ
 
 | Metric | Description |
 |--------|-------------|
-| **Transcripts** | Percentage of samples where STT successfully returned a transcription. Samples without one are left out of the WER and Perfect columns |
+| **Transcripts** | Percentage of samples where STT successfully returned a transcription. A sample fails when the service returns nothing or reports an error, such as a lost connection, while it runs. Failed samples are left out of the WER, Perfect and TTFS columns |
 | **Perfect** | Transcriptions with 0% semantic WER, out of the samples with a transcription |
 | **WER Mean** | Average semantic word error rate across samples |
 | **Pooled WER** | Weighted WER (total errors / total reference words) |
-| **TTFS Median** | Median time from user stops speaking to final transcription segment |
+| **TTFS Median** | Median time from when the user stops speaking to when the last transcription segment for the turn arrives |
 | **TTFS P95** | 95th percentile TTFS - worst 5% of samples have latency above this |
 | **TTFS P99** | 99th percentile TTFS - worst 1% of samples have latency above this |
 
 > **Semantic WER** measures only transcription errors that would impact an LLM agent's understanding. Punctuation, contractions, filler words, and equivalent phrasings are ignored.
 
-> **TTFS (Time To Final Segment)** is measured from when the user stops speaking to when the final transcription segment is received. For streaming voice agents, lower TTFS means faster response times.
+> **TTFS (Time To Final Segment)** is measured from when the user stops speaking to when the last transcription segment for that turn is received: the moment the transcript is complete. Which percentile matters depends on the service; see [Reading TTFS](#what-this-benchmark-measures).
 
 ## Contributing a Result
 
@@ -148,9 +166,20 @@ cp env.example .env
 
 ## How It Works
 
+### Running a Sample
+
+Each sample is run by [Pipecat's eval harness](https://github.com/pipecat-ai/pipecat/tree/main/evals), the same one that tests Pipecat's own bots. For every sample, `stt-benchmark run`:
+
+1. Starts a small bot ([`evals/bot.py`](src/stt_benchmark/evals/bot.py)) holding a Silero VAD and the STT service under test. A fresh bot per sample means a fresh connection to the STT service per sample.
+2. Has the harness connect to it as a client and play the sample in real time, followed by silence, as a caller would. When the sample's audio has finished, the harness tells the bot so with a marker (a DTMF keypress, sent as data, which the STT service never hears).
+3. Lets the bot collect every final transcript and the service's TTFS. The bot decides the sample is done once the audio has finished and the STT service has been quiet for 2 seconds (10 seconds at most).
+4. Stores the result the bot reports back.
+
+Samples run one at a time unless you ask for more with `--concurrency`; see [Concurrency](docs/cli.md#concurrency).
+
 ### TTFS Measurement
 
-**TTFS for STT is different from typical request/response latency.** Since STT services receive continuous audio input, there's no discrete request to measure from. Instead, we measure from when the user **stops speaking** to when the **final transcription** arrives.
+**TTFS for STT is different from typical request/response latency.** Since STT services receive continuous audio input, there's no discrete request to measure from. Instead, we measure from when the user **stops speaking** to when the **last transcript for that turn** arrives. That is the moment the agent has everything the user said.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -164,7 +193,7 @@ cp env.example .env
 │         │                              │                  │                 │
 │         │                              └──── TTFS ────────┼────────►        │
 │         │                           speech_end_time       │     T3          │
-│         │                                                 │  (final         │
+│         │                                                 │  (last          │
 │         │     T1              T2                          │ transcript)     │
 │         │      │               │                          │                 │
 │         │      ▼               ▼                          │                 │
@@ -174,10 +203,17 @@ cp env.example .env
 
 **Key points:**
 - `speech_end_time` = `VADUserStoppedSpeakingFrame` timestamp − VAD `stop_secs`
-- TTFS = final `TranscriptionFrame` receipt time − `speech_end_time`
-- Streaming services emit multiple partial transcripts; we use the **final** one
+- TTFS = last `TranscriptionFrame` receipt time − `speech_end_time`
+- Streaming services emit several transcripts for one turn; we use the **last** one
 
-**Why the final transcript?** For LLM/TTS, there's a discrete input→output making latency measurement simple. For streaming STT, audio flows continuously and generates multiple `TranscriptionFrame`s. We can't know when the STT service finalized audio for intermediate transcripts, so we measure from the final one and use the VAD signal to determine when the user actually stopped speaking.
+**Why the last transcript?** An agent that replied after an earlier one would be answering part of what the user said, so the turn's latency is set by the last one.
+
+**How the last transcript is identified.** There are two cases, and they give the same measurement:
+
+- **The service signals completion.** When the VAD reports the end of speech, Pipecat asks the service to finish the turn, where the service supports it. The service's reply confirms that the transcript is complete, and Pipecat marks that transcript as finalized. TTFS is reported as soon as it arrives.
+- **The service gives no signal.** Pipecat waits 2 seconds after the VAD reports the end of speech and takes the last transcript that arrived in that window. TTFS is the time that transcript arrived, not the end of the wait.
+
+The benchmark can wait and look back; a live agent can't, which is why the signal changes how the results should be read. See [Reading TTFS](#what-this-benchmark-measures).
 
 ### Semantic WER
 
@@ -217,6 +253,9 @@ uv run stt-benchmark run --services all
 
 # Limit samples and adjust VAD
 uv run stt-benchmark run --services deepgram --limit 50 --vad-stop-secs 0.3
+
+# Run 8 samples at a time (the default is 1)
+uv run stt-benchmark run --services deepgram --concurrency 8
 ```
 
 ### Generating Ground Truth
@@ -260,6 +299,7 @@ See [docs/cli.md](docs/cli.md) for complete CLI reference.
 stt_benchmark_data/
 ├── audio/                    # Downloaded audio files
 ├── results.db                # SQLite database
+├── eval_runs/                # Per-run manifest, scenarios, logs and results.jsonl
 ├── ground_truth_runs/        # Iteration JSONL files
 ├── validation_summary.txt    # Generated reports
 └── validation_full.csv
@@ -278,26 +318,28 @@ stt_benchmark_data/
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│                      PipelineWorker                      │
-│  observers=[MetricsCollector, TranscriptionCollector]    │
-├──────────────────────────────────────────────────────────┤
-│                                                          │
-│       ┌──────────────────┐                               │
-│       │ SyntheticInput   │  Plays audio at real-time pace│
-│       │ Transport        │                               │
-│       └────────┬─────────┘                               │
-│                ▼                                         │
-│       ┌──────────────────┐                               │
-│       │ VADProcessor     │  Emits VAD frames via Silero  │
-│       └────────┬─────────┘                               │
-│                ▼                                         │
-│       ┌──────────────────┐                               │
-│       │ STTService       │  Emits transcript + metrics   │
-│       └──────────────────┘                               │
-│                           Observers capture frames       │
-└──────────────────────────────────────────────────────────┘
+┌───────────────────────────┐          ┌───────────────────────────────────────┐
+│  Eval harness             │          │  Bot (one per sample)                 │
+│  (pipecat.evals)          │          │                                       │
+│                           │  audio,  │   ┌──────────────┐                    │
+│  Plays the sample in real │  then    │   │ Eval         │                    │
+│  time, then silence       │ silence  │   │ transport    │                    │
+│                           ├─────────►│   └──────┬───────┘                    │
+│                           │          │          ▼                            │
+│                           │          │   ┌──────────────┐  Emits VAD frames  │
+│                           │          │   │ VADProcessor │  via Silero        │
+│                           │          │   └──────┬───────┘                    │
+│                           │          │          ▼                            │
+│                           │  result  │   ┌──────────────┐  Emits transcripts │
+│  Waits for the bot's      │ message  │   │ STTService   │  and metrics       │
+│  result, writes           │◄─────────┤   └──────────────┘                    │
+│  results.jsonl            │          │   Observers collect the transcripts   │
+│                           │          │   and TTFS; the bot reports them once │
+│                           │          │   the STT service has gone quiet      │
+└───────────────────────────┘          └───────────────────────────────────────┘
 ```
+
+The harness and the bot are separate processes talking over a local WebSocket. `stt-benchmark run` writes an eval suite for the samples to run (one scenario per sample), runs it, and copies each result from the suite's `results.jsonl` into `results.db`.
 
 ## Dataset
 

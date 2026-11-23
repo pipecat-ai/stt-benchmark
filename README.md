@@ -54,12 +54,16 @@ Benchmark results on 1000 samples from the `pipecat-ai/smart-turn-data-v3.1-trai
 | Speechmatics | linden-1 | 99.5% | 83.9% | 1.11% | 0.96% | 369ms | 438ms | 690ms |
 | Speechmatics | N/A | 99.7% | 83.1% | 1.17% | 0.96% | 495ms | 676ms | 736ms |
 | xAI | grok-voice-transcribe-2.0 | 99.8% | 89.4% | 1.12% | 0.79% | 1322ms | 1895ms | 2148ms |
+| Yoob | yoob-asr-pro-v1 | 99.9% | 90.1% | 0.66% | 0.65% | 462ms | 1425ms | 1888ms |
+| Yoob | yoob-asr-turbo-v1 | 100.0% | 87.2% | 0.89% | 0.84% | 451ms | 1248ms | 1778ms |
 | Zoom | zoom-scribe-en | 99.4% | 91.1% | 0.65% | 0.56% | 268ms | 368ms | 414ms |
 | Zoom | zoom-scribe-en-pro | 100.0% | 93.5% | 0.54% | 0.41% | 362ms | 572ms | 655ms |
 | Zoom | zoom-scribe-multilingual | 99.5% | 90.2% | 0.74% | 0.69% | 350ms | 526ms | 631ms |
 <!-- RESULTS_TABLE:END -->
 
 Small WER differences aren't meaningful on this data. Among the most accurate services, differences of less than about 0.25 percentage points are within the 95% confidence interval from bootstrap resampling of the benchmark samples, so those services can't be reliably ranked against each other; the margin is wider for less accurate services.
+
+Yoob's latency (TTFS) was measured on Yoob's own server network, so unlike the other rows it includes no internet round trip to the service; expect it to be higher from a client elsewhere. Yoob's WER columns are unaffected.
 
 † Scored by the previous judge (Claude Sonnet 4.5), which reports WER about 15% higher on average than the current judge. These rows will be re-scored.
 

@@ -542,6 +542,28 @@ def create_soniox_stt_rt_v6() -> FrameProcessor:
     )
 
 
+def create_yoob() -> FrameProcessor:
+    from pipecat.services.yoob.stt import YoobSTTService
+
+    # Live transcription socket (yoob-asr-turbo-v1). A VAD stop closes the utterance at once, so the
+    # final arrives without waiting for the server's own end of speech.
+    return YoobSTTService(
+        api_key=_get_env("YOOB_API_KEY"),
+        settings=YoobSTTService.Settings(model="yoob-asr-turbo-v1", language=Language.EN),
+    )
+
+
+def create_yoob_asr_pro_v1() -> FrameProcessor:
+    from pipecat.services.yoob.stt import YoobSTTService
+
+    # yoob-asr-pro-v1: the most accurate model, on the same live socket (a second Yoob model,
+    # not a successor: Turbo stays current).
+    return YoobSTTService(
+        api_key=_get_env("YOOB_API_KEY"),
+        settings=YoobSTTService.Settings(model="yoob-asr-pro-v1", language=Language.EN),
+    )
+
+
 # Legacy real-time endpoint (/v2), driven by Pipecat's VAD. Benchmarked on
 # pipecat-ai <1.10; since 1.10.0 SpeechmaticsSTTService only speaks to the
 # Agent STT endpoint, so this entry no longer connects. Kept for the record.
@@ -838,6 +860,18 @@ STT_SERVICES: dict[str, ServiceDefinition] = {
         vendor="Soniox",
         model_label="stt-rt-v6",
         required_env_vars=["SONIOX_API_KEY"],
+    ),
+    "yoob": ServiceDefinition(
+        factory=create_yoob,
+        vendor="Yoob",
+        model_label="yoob-asr-turbo-v1",
+        required_env_vars=["YOOB_API_KEY"],
+    ),
+    "yoob_asr_pro_v1": ServiceDefinition(
+        factory=create_yoob_asr_pro_v1,
+        vendor="Yoob",
+        model_label="yoob-asr-pro-v1",
+        required_env_vars=["YOOB_API_KEY"],
     ),
     "speechmatics": ServiceDefinition(
         factory=create_speechmatics,

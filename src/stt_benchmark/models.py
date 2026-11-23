@@ -50,6 +50,8 @@ class ServiceName(StrEnum):
     SONIOX = "soniox"
     SONIOX_STT_RT_V5 = "soniox_stt_rt_v5"
     SONIOX_STT_RT_V6 = "soniox_stt_rt_v6"
+    YOOB = "yoob"
+    YOOB_ASR_PRO_V1 = "yoob_asr_pro_v1"
     WHISPER = "whisper"
     XAI = "xai"
     ZOOM = "zoom"

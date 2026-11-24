@@ -24,6 +24,11 @@ class ServiceName(StrEnum):
     CARTESIA = "cartesia"
     CARTESIA_INK2 = "cartesia_ink2"
     DEEPGRAM = "deepgram"
+    # Temporary, for the endpointing experiment; not for merging.
+    DEEPGRAM_EP_DEFAULT = "deepgram_ep_default"
+    DEEPGRAM_EP_200 = "deepgram_ep_200"
+    DEEPGRAM_EP_300 = "deepgram_ep_300"
+    DEEPGRAM_EP_OFF = "deepgram_ep_off"
     # DEEPGRAM_FLUX = "deepgram_flux"
     ELEVENLABS = "elevenlabs"
     ELEVENLABS_HTTP = "elevenlabs_http"

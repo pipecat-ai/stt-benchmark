@@ -246,6 +246,41 @@ def create_deepgram() -> FrameProcessor:
     )
 
 
+# Temporary, for the endpointing experiment; not for merging. nova-3-general as
+# in create_deepgram(), with Deepgram's server-side endpointing varied. Pipecat
+# still sends Finalize at each VAD stop in every one of them.
+def _create_deepgram_endpointing(endpointing: int | bool | None) -> FrameProcessor:
+    from pipecat.services.deepgram.stt import DeepgramSTTService
+
+    settings = DeepgramSTTService.Settings(
+        model="nova-3-general",
+        smart_format=False,
+        profanity_filter=False,
+        language=Language.EN,
+    )
+    if endpointing is not None:
+        settings.endpointing = endpointing
+    return DeepgramSTTService(api_key=_get_env("DEEPGRAM_API_KEY"), settings=settings)
+
+
+# Endpointing not set: Deepgram's default of 10 ms. The same as create_deepgram().
+def create_deepgram_ep_default() -> FrameProcessor:
+    return _create_deepgram_endpointing(None)
+
+
+def create_deepgram_ep_200() -> FrameProcessor:
+    return _create_deepgram_endpointing(200)
+
+
+def create_deepgram_ep_300() -> FrameProcessor:
+    return _create_deepgram_endpointing(300)
+
+
+# Endpointing off: only Finalize ends a transcript.
+def create_deepgram_ep_off() -> FrameProcessor:
+    return _create_deepgram_endpointing(False)
+
+
 def create_elevenlabs() -> FrameProcessor:
     from pipecat.services.elevenlabs.stt import ElevenLabsRealtimeSTTService
 
@@ -696,6 +731,34 @@ STT_SERVICES: dict[str, ServiceDefinition] = {
         vendor="Deepgram",
         model_label="nova-3-general",
         required_env_vars=["DEEPGRAM_API_KEY"],
+    ),
+    "deepgram_ep_default": ServiceDefinition(
+        factory=create_deepgram_ep_default,
+        vendor="Deepgram",
+        model_label="nova-3-general (endpointing default)",
+        required_env_vars=["DEEPGRAM_API_KEY"],
+        is_current=False,  # experiment only
+    ),
+    "deepgram_ep_200": ServiceDefinition(
+        factory=create_deepgram_ep_200,
+        vendor="Deepgram",
+        model_label="nova-3-general (endpointing 200 ms)",
+        required_env_vars=["DEEPGRAM_API_KEY"],
+        is_current=False,  # experiment only
+    ),
+    "deepgram_ep_300": ServiceDefinition(
+        factory=create_deepgram_ep_300,
+        vendor="Deepgram",
+        model_label="nova-3-general (endpointing 300 ms)",
+        required_env_vars=["DEEPGRAM_API_KEY"],
+        is_current=False,  # experiment only
+    ),
+    "deepgram_ep_off": ServiceDefinition(
+        factory=create_deepgram_ep_off,
+        vendor="Deepgram",
+        model_label="nova-3-general (endpointing off)",
+        required_env_vars=["DEEPGRAM_API_KEY"],
+        is_current=False,  # experiment only
     ),
     "elevenlabs": ServiceDefinition(
         factory=create_elevenlabs,

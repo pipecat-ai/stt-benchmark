@@ -18,7 +18,7 @@ Every service is measured in the same position it holds in an agent: inside a [P
 
 Two services with the same median can therefore feel very different in an agent: one responds at its median, the other at its P99. The benchmark itself records TTFS the same way for both, after the fact; see [TTFS Measurement](#ttfs-measurement).
 
-**What it doesn't measure.** The service's own turn detection is left out; the pipeline's VAD ends each turn for every service. Samples are single English utterances, so the results say nothing about other languages, long-form audio, or multi-speaker audio. Latency is measured from one network location and includes the network path to each service.
+**What it doesn't measure.** The service's own turn detection is left out; the pipeline's VAD ends each turn for every service. Samples are single English utterances, so the results say nothing about other languages, long-form audio, or multi-speaker audio. Latency is measured from one network location and includes the network path to each service, so the same service measures differently from somewhere else; see [Running From the Cloud](docs/cloud.md) for a fixed one.
 
 ## Results Summary
 
@@ -359,6 +359,7 @@ Audio samples are sourced from the `pipecat-ai/smart-turn-data-v3.1-train` datas
 - [CLI Reference](docs/cli.md) - Complete command documentation
 - [Running Analysis](docs/analysis.md) - Step-by-step analysis guide
 - [Adding Models](docs/adding-models.md) - How to add a new vendor or a new model for an existing vendor
+- [Running From the Cloud](docs/cloud.md) - Run the benchmark from an AWS instance in a fixed region
 
 ## License
 

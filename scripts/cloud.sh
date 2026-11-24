@@ -3,7 +3,8 @@
 # your laptop is.
 #
 #   scripts/cloud.sh launch            create the instance and install the benchmark
-#   scripts/cloud.sh push              copy .env, audio samples and results.db up
+#   scripts/cloud.sh push              copy .env and the audio samples up (and results.db, the first time)
+#   scripts/cloud.sh push --db         the same, and replace the instance's results.db with yours
 #   scripts/cloud.sh bench <args...>   run `stt-benchmark <args...>` on the instance
 #   scripts/cloud.sh bench --stop ...  the same, and stop the instance when it finishes
 #   scripts/cloud.sh pull              copy results.db back (the local one is backed up)
@@ -141,22 +142,52 @@ echo "Installed: \$(git log --oneline -1)"
 EOF
 }
 
+# SQLite keeps recent writes in a file beside the database until it is
+# checkpointed. Fold them in, so that copying results.db copies everything.
+CHECKPOINT="import sqlite3; sqlite3.connect('stt_benchmark_data/results.db').execute('PRAGMA wal_checkpoint(TRUNCATE)')"
+
+# The instance's results.db is where measurements are written, so it is only
+# replaced when asked: a plain push sends it just once, when there is none.
 cmd_push() {
-    local target
+    local target replace_db=false remote_db="$REMOTE_DIR/stt_benchmark_data/results.db"
+    if [[ "${1:-}" == "--db" ]]; then
+        replace_db=true
+    elif [[ $# -gt 0 ]]; then
+        echo "Usage: scripts/cloud.sh push [--db]" >&2
+        exit 1
+    fi
     target="$(host)"
     scp "${SSH_OPTS[@]}" -q .env "$target:$REMOTE_DIR/.env"
-    echo "Copying the audio samples and results.db (about 3 GB the first time)..."
-    rsync -az -e "ssh ${SSH_OPTS[*]}" \
-        stt_benchmark_data/audio stt_benchmark_data/results.db \
+    remote "chmod 600 $REMOTE_DIR/.env"
+    echo "Copying the audio samples (about 3 GB the first time)..."
+    rsync -az -e "ssh ${SSH_OPTS[*]}" stt_benchmark_data/audio \
         "$target:$REMOTE_DIR/stt_benchmark_data/"
-    echo "Copied .env, the audio samples and results.db."
+
+    if ! remote "test -f $remote_db"; then
+        python3 -c "$CHECKPOINT"
+        rsync -az -e "ssh ${SSH_OPTS[*]}" stt_benchmark_data/results.db "$target:$remote_db"
+        echo "Copied .env, the audio samples and results.db."
+    elif $replace_db; then
+        local backup
+        backup="results.before-push.$(date +%Y%m%d_%H%M%S).db"
+        python3 -c "$CHECKPOINT"
+        remote "cd $REMOTE_DIR && python3 -c \"$CHECKPOINT\" && cp stt_benchmark_data/results.db stt_benchmark_data/$backup"
+        rsync -az -e "ssh ${SSH_OPTS[*]}" stt_benchmark_data/results.db "$target:$remote_db"
+        echo "Copied .env, the audio samples and results.db."
+        echo "The instance's previous results.db is kept there as $backup"
+    else
+        echo "Copied .env and the audio samples."
+        echo "The instance's results.db was left alone; scripts/cloud.sh push --db replaces it."
+    fi
 }
 
 cmd_pull() {
     local target backup
     target="$(host)"
     backup="stt_benchmark_data/results.before-pull.$(date +%Y%m%d_%H%M%S).db"
+    python3 -c "$CHECKPOINT"
     cp stt_benchmark_data/results.db "$backup"
+    remote "cd $REMOTE_DIR && python3 -c \"$CHECKPOINT\""
     rsync -az -e "ssh ${SSH_OPTS[*]}" \
         "$target:$REMOTE_DIR/stt_benchmark_data/results.db" stt_benchmark_data/results.db
     echo "Copied results.db from the instance. The previous local copy is $backup"
@@ -224,7 +255,7 @@ shift || true
 case "$command" in
     launch | setup | push | pull | bench | ssh | status | stop | start | terminate) "cmd_$command" "$@" ;;
     *)
-        sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
+        sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'
         exit 1
         ;;
 esac

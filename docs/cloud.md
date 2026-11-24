@@ -29,6 +29,8 @@ scripts/cloud.sh push
 
 `push` copies your `.env`, and so your API keys, onto the instance's disk.
 
+Run `push` again whenever `.env` changes, for example after adding a key for a new service. It never replaces a `results.db` that is already on the instance; see [Where the results live](#where-the-results-live).
+
 ## Running
 
 ```bash
@@ -49,7 +51,25 @@ When you want the results locally, to regenerate the README table and charts:
 scripts/cloud.sh pull
 ```
 
-`pull` replaces your local `results.db` with the instance's, after saving the local one as `results.before-pull.<timestamp>.db`. Treat the instance's database as the one measurements are written to: runs made locally into the main database after a `push` are overwritten by the next `pull`.
+`pull` replaces your local `results.db` with the instance's, after saving the local one as `results.before-pull.<timestamp>.db`.
+
+### Where the results live
+
+The instance's `results.db` is the one measurements are written to. Your local copy is for regenerating the table and charts, and `pull` refreshes it.
+
+- `push` sends `results.db` only when the instance has none, which is the first time.
+- `push --db` replaces the instance's database with your local one, and keeps the instance's previous copy beside it as `results.before-push.<timestamp>.db`. Use it only when the local copy has something the instance lacks.
+- Runs made locally into the main database are overwritten by the next `pull`. Use `--test` for local trial runs.
+
+### Code
+
+The instance has its own clone of the repository. `bench` updates it to the latest commit of its branch before each run, so merged changes need nothing more. To run a branch that is not merged yet, push it to GitHub and switch the instance to it:
+
+```bash
+STT_CLOUD_BRANCH=my-branch scripts/cloud.sh setup
+```
+
+Uncommitted local changes never reach the instance.
 
 ## Stopping and Cost
 

@@ -763,10 +763,6 @@ class SemanticWEREvaluator:
                         tool_calls[-1]["output"] = result
 
                 if tool_results:
-                    # Add assistant message and tool results
-                    messages.append({"role": "assistant", "content": response.content})
-                    messages.append({"role": "user", "content": tool_results})
-
                     conversation_trace.append(
                         {
                             "role": "user",
@@ -774,29 +770,9 @@ class SemanticWEREvaluator:
                         }
                     )
 
-                # If we got a result, we can break after one more turn for final response
+                # The score comes from the tool call, so there is nothing
+                # more to ask the judge once it has made one.
                 if result is not None:
-                    # Get final response after tool result
-                    try:
-                        final_response = await self._api_call(
-                            self._request(messages, max_tokens=4096), filename
-                        )
-
-                        final_content = []
-                        for block in final_response.content:
-                            if block.type == "text":
-                                final_content.append({"type": "text", "text": block.text})
-
-                        conversation_trace.append(
-                            {
-                                "role": "assistant",
-                                "content": final_content,
-                                "stop_reason": final_response.stop_reason,
-                            }
-                        )
-                    except Exception as e:
-                        logger.warning(f"Error getting final response: {e}")
-
                     break
 
         if result is None:

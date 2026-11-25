@@ -391,6 +391,21 @@ def count_reference_words(text: str) -> int:
     return count
 
 
+def comparison_text(text: str) -> str:
+    """Reduce a transcription to its words, for telling when two say the same thing.
+
+    Case and the punctuation around each word are dropped, and nothing else:
+    punctuation inside a word ("we're", "7:30", "Wi-Fi") is kept, so texts
+    that differ in anything the judge could count as an error stay different.
+    """
+    words = []
+    for token in text.lower().replace("’", "'").split():
+        token = token.strip('.,!?;:"“”()[]{}…')
+        if any(ch.isalnum() for ch in token):
+            words.append(token)
+    return " ".join(words)
+
+
 def error_weight(error: dict) -> int:
     """Number of errors one entry of the judge's error list counts for.
 
@@ -657,6 +672,10 @@ class SemanticWEREvaluator:
         if not hypothesis.strip():
             return self._no_hypothesis_result(reference, session_id, start_time)
 
+        # Nothing for the judge to weigh: the words are the same.
+        if comparison_text(reference) == comparison_text(hypothesis):
+            return self._identical_result(reference, session_id, start_time)
+
         user_prompt = USER_PROMPT_TEMPLATE.format(reference=reference, hypothesis=hypothesis)
 
         # Initialize conversation
@@ -763,10 +782,6 @@ class SemanticWEREvaluator:
                         tool_calls[-1]["output"] = result
 
                 if tool_results:
-                    # Add assistant message and tool results
-                    messages.append({"role": "assistant", "content": response.content})
-                    messages.append({"role": "user", "content": tool_results})
-
                     conversation_trace.append(
                         {
                             "role": "user",
@@ -774,29 +789,9 @@ class SemanticWEREvaluator:
                         }
                     )
 
-                # If we got a result, we can break after one more turn for final response
+                # The score comes from the tool call, so there is nothing
+                # more to ask the judge once it has made one.
                 if result is not None:
-                    # Get final response after tool result
-                    try:
-                        final_response = await self._api_call(
-                            self._request(messages, max_tokens=4096), filename
-                        )
-
-                        final_content = []
-                        for block in final_response.content:
-                            if block.type == "text":
-                                final_content.append({"type": "text", "text": block.text})
-
-                        conversation_trace.append(
-                            {
-                                "role": "assistant",
-                                "content": final_content,
-                                "stop_reason": final_response.stop_reason,
-                            }
-                        )
-                    except Exception as e:
-                        logger.warning(f"Error getting final response: {e}")
-
                     break
 
         if result is None:
@@ -859,6 +854,40 @@ class SemanticWEREvaluator:
             deletions=0,
             insertions=0,
             reference_words=0,
+            duration_ms=int((time.time() - start_time) * 1000),
+            num_turns=0,
+            model_used=self.model,
+        )
+        return result, trace
+
+    def _identical_result(
+        self, reference: str, session_id: str, start_time: float
+    ) -> tuple[dict, SemanticWERTrace]:
+        """Handle a hypothesis with the same words as the reference, without the judge."""
+        words = count_reference_words(reference)
+        text = comparison_text(reference)
+        result = {
+            "wer": 0.0,
+            "substitutions": 0,
+            "deletions": 0,
+            "insertions": 0,
+            "reference_words": words,
+            "normalized_reference": text,
+            "normalized_hypothesis": text,
+        }
+        trace = SemanticWERTrace(
+            sample_id="",
+            service_name=ServiceName.DEEPGRAM,
+            session_id=session_id,
+            conversation_trace=[],
+            tool_calls=[],
+            normalized_reference=text,
+            normalized_hypothesis=text,
+            wer=0.0,
+            substitutions=0,
+            deletions=0,
+            insertions=0,
+            reference_words=words,
             duration_ms=int((time.time() - start_time) * 1000),
             num_turns=0,
             model_used=self.model,
@@ -1009,11 +1038,19 @@ class SemanticWEREvaluator:
             logger.info(f"All samples already have WER metrics for {service_name.value}")
             return []
 
+        # The same words for the same sample get the same score, whichever
+        # service produced them, so each is judged once. Only this judge's
+        # scores are reused: another judge's aren't comparable.
+        judged: dict[tuple[str, str], WERMetrics] = {}
+        for transcription, earlier in await self.db.get_judged_transcriptions(self.judge):
+            judged.setdefault((earlier.sample_id, comparison_text(transcription)), earlier)
+
         results: list[WERMetrics] = []
         completed = 0
+        reused = 0
 
         async def _eval_sample(sample):
-            nonlocal completed
+            nonlocal completed, reused
 
             # Get result and ground truth
             result, gt = await self.db.get_result_with_ground_truth(
@@ -1026,6 +1063,23 @@ class SemanticWEREvaluator:
 
             if not gt:
                 logger.warning(f"No ground truth for sample {sample.sample_id}")
+                return
+
+            earlier = judged.get((sample.sample_id, comparison_text(result.transcription)))
+            if earlier is not None:
+                metrics = earlier.model_copy(
+                    update={
+                        "service_name": service_name,
+                        "model_name": model_name,
+                        "timestamp": datetime.now(UTC),
+                    }
+                )
+                await self.db.insert_wer_metrics(metrics)
+                results.append(metrics)
+                completed += 1
+                reused += 1
+                if progress_callback:
+                    progress_callback(completed, len(samples), sample.sample_id)
                 return
 
             # Evaluate with Claude (with retry and timeout)
@@ -1076,6 +1130,11 @@ class SemanticWEREvaluator:
 
         await asyncio.gather(*(_eval_sample(sample) for sample in samples))
 
+        if reused:
+            logger.info(
+                f"{service_name.value}: reused {reused} of {len(results)} scores from"
+                " transcriptions already judged"
+            )
         return results
 
     async def compute_pooled_wer(self, service_name: ServiceName) -> dict:

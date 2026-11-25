@@ -623,6 +623,31 @@ class Database:
         rows = await cursor.fetchall()
         return [self._row_to_wer_metrics(row) for row in rows]
 
+    async def get_judged_transcriptions(self, judge: str) -> list[tuple[str, WERMetrics]]:
+        """Get every transcription a judge has scored, with the score it gave.
+
+        Returns:
+            Pairs of (transcription, WERMetrics), oldest first.
+        """
+        cursor = await self._conn.execute(
+            """
+            SELECT w.*, r.transcription FROM wer_metrics w
+            INNER JOIN results r ON r.sample_id = w.sample_id
+                AND r.service_name = w.service_name
+                AND COALESCE(r.model_name, '') = COALESCE(w.model_name, '')
+            WHERE w.judge = ? AND r.transcription IS NOT NULL
+            ORDER BY w.timestamp
+            """,
+            (judge,),
+        )
+        known = {s.value for s in ServiceName}
+        return [
+            (row["transcription"], self._row_to_wer_metrics(row))
+            for row in await cursor.fetchall()
+            # A database can hold results for services since removed.
+            if row["service_name"] in known
+        ]
+
     async def delete_wer_metrics_for_service(
         self, service_name: ServiceName, model_name: str | None = None
     ) -> int:

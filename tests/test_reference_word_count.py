@@ -3,6 +3,7 @@
 import pytest
 
 from stt_benchmark.evaluation.semantic_wer import (
+    comparison_text,
     count_reference_words,
     error_weight,
     invented_insertions,
@@ -75,3 +76,24 @@ def _insertions(*words):
 )
 def test_invented_insertions(errors, hypothesis, expected):
     assert invented_insertions(errors, hypothesis) is expected
+
+
+@pytest.mark.parametrize(
+    ("first", "second", "same"),
+    [
+        # Case and the punctuation around words don't matter.
+        ("Hello, world!", "hello world", True),
+        ("It’s “fine”… really.", "it's fine really", True),
+        ("Wait - really?", "wait really", True),
+        # Anything inside a word does.
+        ("we're late", "were late", False),
+        ("at 7:30", "at 730", False),
+        ("my Wi-Fi", "my wifi", False),
+        ("e-mail me", "e mail me", False),
+        # So does any word, in any script.
+        ("send it now", "send it", False),
+        ("thanks 幫", "thanks", False),
+    ],
+)
+def test_comparison_text(first, second, same):
+    assert (comparison_text(first) == comparison_text(second)) is same

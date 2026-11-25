@@ -241,6 +241,13 @@ The judge lists the errors it finds; the WER is computed from that list, divided
 
 The judge is Claude Sonnet 5.5 with adaptive thinking at `medium` effort, configured in [`semantic_wer.py`](src/stt_benchmark/evaluation/semantic_wer.py). Each result records the judge that produced it, and `stt-benchmark wer` won't add results to a service that another judge scored, since the two sets of scores aren't comparable. After changing the judge, re-score with `--force-recalculate`. To measure a judge before re-scoring with it, use the [judge experiment scripts](scripts/README.md#judge-experiments).
 
+About half of all transcriptions never reach the judge:
+
+- **Same words as the reference.** A transcription that differs from the reference only in capitalization and in punctuation around words is scored as zero errors.
+- **Same words as a transcription already judged.** When the same judge has already scored the same words for the same sample, for any service, that score is used again. Two services that produce the same words for a sample therefore always get the same score.
+
+Because of the second rule, `--force-recalculate` on one service still picks up scores the judge gave other services for identical transcriptions. Results scored without the judge have no reasoning trace of their own.
+
 ## Supported Services
 
 Each service key is one (vendor, model) pair — a vendor with multiple models has multiple keys (e.g. `cartesia` / `cartesia_ink2`, `assemblyai` / `assemblyai_universal_3_6_pro`). The full list is defined in [`src/stt_benchmark/services.py`](src/stt_benchmark/services.py) (`STT_SERVICES`). To add a model, see [docs/adding-models.md](docs/adding-models.md). See `env.example` for required API keys.
@@ -279,7 +286,7 @@ uv run stt-benchmark ground-truth review <run_id>
 # Calculate for all services
 uv run stt-benchmark wer
 
-# Force recalculate
+# Force recalculate (identical transcriptions judged for other services are still reused)
 uv run stt-benchmark wer --services deepgram --force-recalculate
 ```
 

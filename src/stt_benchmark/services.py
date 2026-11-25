@@ -455,6 +455,21 @@ def create_openai_gpt_realtime_whisper() -> FrameProcessor:
     )
 
 
+# Oruk Fourier-2B: one HTTP transcription request per VAD speech segment via
+# Oruk's OpenAI-compatible endpoint (SegmentedSTTService off the pipeline's VAD).
+def create_oruk() -> FrameProcessor:
+    from pipecat.services.openai.stt import OpenAISTTService
+
+    return OpenAISTTService(
+        api_key=_get_env("ORUK_API_KEY"),
+        base_url="https://speech-api.oruk.ai/v1",
+        settings=OpenAISTTService.Settings(
+            model="oruk-fourier-2b",
+            language=Language.EN,
+        ),
+    )
+
+
 # Rime transcribes one request per VAD speech segment and selects the model itself.
 def create_rime() -> FrameProcessor:
     from pipecat.services.rime.stt import RimeSTTService
@@ -793,6 +808,12 @@ STT_SERVICES: dict[str, ServiceDefinition] = {
         vendor="OpenAI",
         model_label="gpt-4o-transcribe",
         required_env_vars=["OPENAI_API_KEY"],
+    ),
+    "oruk": ServiceDefinition(
+        factory=create_oruk,
+        vendor="Oruk",
+        model_label="oruk-fourier-2b",
+        required_env_vars=["ORUK_API_KEY"],
     ),
     "rime": ServiceDefinition(
         factory=create_rime,

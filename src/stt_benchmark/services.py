@@ -319,7 +319,7 @@ def create_google() -> FrameProcessor:
 
 
 def create_google_gemini_3_5_transcribe_live() -> FrameProcessor:
-    from pipecat.services.google.stt import GeminiSTTService
+    from pipecat.services.google.gemini_live.stt import GeminiSTTService
 
     return GeminiSTTService(
         api_key=_get_env("GOOGLE_API_KEY"),

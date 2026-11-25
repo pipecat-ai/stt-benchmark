@@ -312,7 +312,7 @@ def create_google() -> FrameProcessor:
         credentials_path=_get_env("GOOGLE_APPLICATION_CREDENTIALS"),
         location=os.getenv("GOOGLE_LOCATION", "us-central1"),
         settings=GoogleSTTService.Settings(
-            languages=Language.EN_US,
+            languages=[Language.EN_US],
             model="latest_long",
         ),
     )

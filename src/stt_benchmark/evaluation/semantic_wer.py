@@ -391,6 +391,21 @@ def count_reference_words(text: str) -> int:
     return count
 
 
+def comparison_text(text: str) -> str:
+    """Reduce a transcription to its words, for telling when two say the same thing.
+
+    Case and the punctuation around each word are dropped, and nothing else:
+    punctuation inside a word ("we're", "7:30", "Wi-Fi") is kept, so texts
+    that differ in anything the judge could count as an error stay different.
+    """
+    words = []
+    for token in text.lower().replace("’", "'").split():
+        token = token.strip('.,!?;:"“”()[]{}…')
+        if any(ch.isalnum() for ch in token):
+            words.append(token)
+    return " ".join(words)
+
+
 def error_weight(error: dict) -> int:
     """Number of errors one entry of the judge's error list counts for.
 
@@ -657,6 +672,10 @@ class SemanticWEREvaluator:
         if not hypothesis.strip():
             return self._no_hypothesis_result(reference, session_id, start_time)
 
+        # Nothing for the judge to weigh: the words are the same.
+        if comparison_text(reference) == comparison_text(hypothesis):
+            return self._identical_result(reference, session_id, start_time)
+
         user_prompt = USER_PROMPT_TEMPLATE.format(reference=reference, hypothesis=hypothesis)
 
         # Initialize conversation
@@ -835,6 +854,40 @@ class SemanticWEREvaluator:
             deletions=0,
             insertions=0,
             reference_words=0,
+            duration_ms=int((time.time() - start_time) * 1000),
+            num_turns=0,
+            model_used=self.model,
+        )
+        return result, trace
+
+    def _identical_result(
+        self, reference: str, session_id: str, start_time: float
+    ) -> tuple[dict, SemanticWERTrace]:
+        """Handle a hypothesis with the same words as the reference, without the judge."""
+        words = count_reference_words(reference)
+        text = comparison_text(reference)
+        result = {
+            "wer": 0.0,
+            "substitutions": 0,
+            "deletions": 0,
+            "insertions": 0,
+            "reference_words": words,
+            "normalized_reference": text,
+            "normalized_hypothesis": text,
+        }
+        trace = SemanticWERTrace(
+            sample_id="",
+            service_name=ServiceName.DEEPGRAM,
+            session_id=session_id,
+            conversation_trace=[],
+            tool_calls=[],
+            normalized_reference=text,
+            normalized_hypothesis=text,
+            wer=0.0,
+            substitutions=0,
+            deletions=0,
+            insertions=0,
+            reference_words=words,
             duration_ms=int((time.time() - start_time) * 1000),
             num_turns=0,
             model_used=self.model,

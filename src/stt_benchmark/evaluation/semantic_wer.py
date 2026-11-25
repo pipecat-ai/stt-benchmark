@@ -1038,11 +1038,19 @@ class SemanticWEREvaluator:
             logger.info(f"All samples already have WER metrics for {service_name.value}")
             return []
 
+        # The same words for the same sample get the same score, whichever
+        # service produced them, so each is judged once. Only this judge's
+        # scores are reused: another judge's aren't comparable.
+        judged: dict[tuple[str, str], WERMetrics] = {}
+        for transcription, earlier in await self.db.get_judged_transcriptions(self.judge):
+            judged.setdefault((earlier.sample_id, comparison_text(transcription)), earlier)
+
         results: list[WERMetrics] = []
         completed = 0
+        reused = 0
 
         async def _eval_sample(sample):
-            nonlocal completed
+            nonlocal completed, reused
 
             # Get result and ground truth
             result, gt = await self.db.get_result_with_ground_truth(
@@ -1055,6 +1063,23 @@ class SemanticWEREvaluator:
 
             if not gt:
                 logger.warning(f"No ground truth for sample {sample.sample_id}")
+                return
+
+            earlier = judged.get((sample.sample_id, comparison_text(result.transcription)))
+            if earlier is not None:
+                metrics = earlier.model_copy(
+                    update={
+                        "service_name": service_name,
+                        "model_name": model_name,
+                        "timestamp": datetime.now(UTC),
+                    }
+                )
+                await self.db.insert_wer_metrics(metrics)
+                results.append(metrics)
+                completed += 1
+                reused += 1
+                if progress_callback:
+                    progress_callback(completed, len(samples), sample.sample_id)
                 return
 
             # Evaluate with Claude (with retry and timeout)
@@ -1105,6 +1130,11 @@ class SemanticWEREvaluator:
 
         await asyncio.gather(*(_eval_sample(sample) for sample in samples))
 
+        if reused:
+            logger.info(
+                f"{service_name.value}: reused {reused} of {len(results)} scores from"
+                " transcriptions already judged"
+            )
         return results
 
     async def compute_pooled_wer(self, service_name: ServiceName) -> dict:

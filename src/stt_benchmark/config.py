@@ -42,6 +42,7 @@ class BenchmarkConfig(BaseSettings):
     mistral_api_key: str = Field(default="", alias="MISTRAL_API_KEY")
     nvidia_api_key: str = Field(default="", alias="NVIDIA_API_KEY")
     openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")
+    oruk_api_key: str = Field(default="", alias="ORUK_API_KEY")
     sagemaker_asr_endpoint_name: str = Field(default="", alias="SAGEMAKER_ASR_ENDPOINT_NAME")
     rime_api_key: str = Field(default="", alias="RIME_API_KEY")
     sarvam_api_key: str = Field(default="", alias="SARVAM_API_KEY")

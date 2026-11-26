@@ -45,29 +45,18 @@ RANGE_P99 = "#86b6ef"
 # placement (adjustText). Override per-metric via the "label_offsets"
 # config key.
 DEFAULT_LABEL_OFFSETS = {
-    "median": {
-        "Smallest AI": (-8, 10, "right"),
-        "Rime": (-10, -4, "right"),
-        "Cartesia": (-10, -8, "right"),
-        "Deepgram": (8, 4, "left"),
-        "ElevenLabs": (8, -12, "left"),
-        "Soniox stt-rt-v4": (9, -9, "left"),
-        "Soniox stt-rt-v5": (9, 5, "left"),
-        "Soniox stt-rt-v6": (8, 8, "left"),
-        "AssemblyAI stt-3-7-realtime-agent": (-70, -75, "left"),
-        "AssemblyAI universal-3-5-pro": (10, -8, "left"),
-        "AssemblyAI universal-3-6-pro": (10, -10, "left"),
-        "Speechmatics": (8, 6, "left"),
-        "Meta": (-8, -12, "right"),
-        "Zoom scribe-en": (8, -12, "left"),
-        "Zoom scribe-en-pro": (11, 0, "left"),
-        "Zoom scribe-multilingual": (10, 4, "left"),
+    "median": {},
+    "median_corner": {
+        "AssemblyAI stt-3-7-realtime-agent": (-9, -12, "right"),
+        "Zoom scribe-en-pro": (-9, 12, "right"),
     },
 }
 
-# Round values the log axes may label; the ones inside a chart's limits are used.
-LATENCY_TICKS = (100, 150, 200, 250, 300, 400, 500, 700, 1000, 1500, 2000, 3000, 5000)
-WER_TICKS = (0.1, 0.2, 0.3, 0.4, 0.5, 0.7, 1, 1.5, 2, 3, 5, 7, 10, 15, 20)
+# Most services sit in the fast, accurate corner, where their labels would
+# overlap on a chart that also has to fit the slowest and least accurate. The
+# median chart leaves that corner unlabelled and a second chart enlarges it:
+# services at or under this median TTFS (ms) and pooled WER (%).
+DEFAULT_CORNER = (450, 1.6)
 
 
 def find_pareto_optimal(names: list, ttfb_values: list, wer_values: list) -> list:
@@ -93,13 +82,20 @@ def plot_pareto_frontier(
     output_path: str = "stt_pareto_frontier.png",
     show: bool = False,
     label_offsets: dict | None = None,
+    corner: tuple[float, float] | None = None,
+    corner_only: bool = False,
 ):
-    """Generate the TTFS vs WER scatter plot with the Pareto frontier highlighted."""
+    """Generate the TTFS vs WER scatter plot with the Pareto frontier highlighted.
+
+    ``corner`` is a (TTFS ms, WER %) limit. With ``corner_only`` the chart shows
+    just the services inside it, enlarged. Without, it shows every service,
+    outlines the corner and leaves the services inside it unlabelled.
+    """
     try:
         import matplotlib.pyplot as plt
         from adjustText import adjust_text
         from matplotlib.lines import Line2D
-        from matplotlib.ticker import FixedLocator, FuncFormatter, NullLocator
+        from matplotlib.patches import Rectangle
     except ImportError as e:
         if "adjustText" in str(e):
             print("adjustText is required for plotting. Install with: uv add adjustText")
@@ -111,12 +107,33 @@ def plot_pareto_frontier(
     ttfb_key = metric_info["key"]
     ttfb_label = metric_info["label"]
     if label_offsets is None:
-        label_offsets = DEFAULT_LABEL_OFFSETS.get(latency_metric, {})
+        key = f"{latency_metric}_corner" if corner_only else latency_metric
+        label_offsets = DEFAULT_LABEL_OFFSETS.get(key, {})
 
-    names = list(data)
+    def in_corner(name: str) -> bool:
+        return (
+            corner is not None
+            and data[name][ttfb_key] <= corner[0]
+            and data[name]["pooled_wer"] <= corner[1]
+        )
+
+    # The frontier is always worked out over every service, so a service is
+    # on it in the enlarged chart only if it is on it overall.
+    everyone = list(data)
+    pareto_optimal = find_pareto_optimal(
+        everyone,
+        [data[n][ttfb_key] for n in everyone],
+        [data[n]["pooled_wer"] for n in everyone],
+    )
+    names = [n for n in everyone if in_corner(n)] if corner_only else everyone
+    if not names:
+        print("No services inside the corner. Nothing to plot.")
+        return
     ttfb_values = [data[n][ttfb_key] for n in names]
     wer_values = [data[n]["pooled_wer"] for n in names]
-    pareto_optimal = find_pareto_optimal(names, ttfb_values, wer_values)
+    if corner_only:
+        pareto_optimal = [p for p in pareto_optimal if in_corner(p[0])]
+    unlabelled = {n for n in names if in_corner(n)} if corner and not corner_only else set()
 
     fig, ax = plt.subplots(figsize=(12.5, 8), dpi=150)
     fig.patch.set_facecolor(SURFACE)
@@ -183,6 +200,8 @@ def plot_pareto_frontier(
     leader_line = {"arrowstyle": "-", "color": MUTED, "alpha": 0.6, "lw": 0.8}
     texts = []
     for name, ttfb, wer in zip(names, ttfb_values, wer_values, strict=False):
+        if name in unlabelled:
+            continue
         if name in label_offsets:
             dx, dy, ha = label_offsets[name]
             ax.annotate(
@@ -206,23 +225,39 @@ def plot_pareto_frontier(
         else:
             texts.append(ax.text(ttfb, wer, name, fontsize=7.5, color=INK_2, zorder=6))
 
-    # Log axes: most services sit in one corner, and a gap of 30 ms or 0.2
-    # points matters more there than among the slow or inaccurate ones.
-    # Limits pad around the data by a ratio, and the ticks are round values
-    # labelled in plain numbers.
-    ax.set_xscale("log")
-    ax.set_yscale("log")
-    x_low, x_high = min(ttfb_values) / 1.09, max(ttfb_values) * 1.15
-    y_low, y_high = min(wer_values) / 1.18, max(wer_values) * 1.2
-    ax.set_xlim(x_low, x_high)
-    ax.set_ylim(y_low, y_high)
-    for axis, ticks, low, high in (
-        (ax.xaxis, LATENCY_TICKS, x_low, x_high),
-        (ax.yaxis, WER_TICKS, y_low, y_high),
-    ):
-        axis.set_major_locator(FixedLocator([t for t in ticks if low <= t <= high]))
-        axis.set_minor_locator(NullLocator())
-        axis.set_major_formatter(FuncFormatter(lambda value, _: f"{value:g}"))
+    # Axis limits: pad around the data instead of forcing a zero origin,
+    # so dense regions keep their resolution.
+    x_range = max(ttfb_values) - min(ttfb_values) or max(ttfb_values) * 0.2 or 1
+    y_range = max(wer_values) - min(wer_values) or max(wer_values) * 0.2 or 1
+    x_low = min(ttfb_values) - 0.08 * x_range
+    y_low = min(wer_values) - 0.08 * y_range
+    ax.set_xlim(x_low, max(ttfb_values) + 0.10 * x_range)
+    ax.set_ylim(y_low, max(wer_values) + 0.12 * y_range)
+
+    # Outline the corner the enlarged chart covers, and say where its labels are.
+    if unlabelled:
+        ax.add_patch(
+            Rectangle(
+                (x_low, y_low),
+                corner[0] - x_low,
+                corner[1] - y_low,
+                fill=False,
+                edgecolor=MUTED,
+                linestyle=(0, (4, 3)),
+                linewidth=1,
+                zorder=2,
+            )
+        )
+        ax.annotate(
+            f"{len(unlabelled)} services, labelled in the enlarged chart",
+            (corner[0], corner[1]),
+            xytext=(6, 6),
+            textcoords="offset points",
+            ha="left",
+            va="bottom",
+            fontsize=8.5,
+            color=INK_2,
+        )
 
     # Recessive chrome: hairline grid, no top/right spines, muted ticks.
     ax.grid(True, color=GRID, linewidth=0.8, zorder=0)
@@ -233,10 +268,13 @@ def plot_pareto_frontier(
         ax.spines[side].set_color(MUTED)
     ax.tick_params(colors=INK_2, labelsize=10)
 
-    ax.set_xlabel(f"{ttfb_label} (ms, log scale; lower is better)", fontsize=11, color=INK)
-    ax.set_ylabel("Semantic WER Pooled (%, log scale; lower is better)", fontsize=11, color=INK)
+    ax.set_xlabel(f"{ttfb_label} (ms) (lower is better)", fontsize=11, color=INK)
+    ax.set_ylabel("Semantic WER Pooled (%) (lower is better)", fontsize=11, color=INK)
+    title = f"STT Pareto Frontier: {ttfb_label} Latency vs Accuracy"
+    if corner_only:
+        title += f"\nServices at or under {corner[0]:g} ms and {corner[1]:g}% WER"
     ax.set_title(
-        f"STT Pareto Frontier: {ttfb_label} Latency vs Accuracy",
+        title,
         fontsize=13,
         fontweight="bold",
         color=INK,
@@ -595,6 +633,27 @@ def main():
     services = args.services or file_config.get("services", None)
     display_names = file_config.get("display_names", {})
     label_offsets_cfg = file_config.get("label_offsets", {})
+    corner = file_config.get("corner", DEFAULT_CORNER)
+    corner = tuple(corner) if corner else None
+
+    def render_pareto(metric: str, plot_output: Path) -> None:
+        """Draw one metric's chart, and for the median the enlarged corner beside it."""
+        # The corner is defined on the median, so only that chart has one.
+        metric_corner = corner if metric == "median" else None
+        plot_pareto_frontier(
+            data, metric, str(plot_output), show, label_offsets_cfg.get(metric), metric_corner
+        )
+        if metric_corner:
+            plot_pareto_frontier(
+                data,
+                metric,
+                str(plot_output.with_name(f"{plot_output.stem}_corner{plot_output.suffix}")),
+                show,
+                label_offsets_cfg.get(f"{metric}_corner"),
+                metric_corner,
+                corner_only=True,
+            )
+
     show = args.show if args.show is not None else file_config.get("show", False)
 
     # The README results table is the single source of truth for the published
@@ -657,9 +716,7 @@ def main():
                 suffix = LATENCY_METRICS[metric]["suffix"]
                 plot_output = output_path / f"{default_basename}{suffix}.png"
                 print(f"\nGenerating {LATENCY_METRICS[metric]['label']} plot...")
-                plot_pareto_frontier(
-                    data, metric, str(plot_output), show, label_offsets_cfg.get(metric)
-                )
+                render_pareto(metric, Path(plot_output))
         else:
             for metric in metrics_to_plot:
                 suffix = LATENCY_METRICS[metric]["suffix"]
@@ -670,9 +727,7 @@ def main():
                 else:
                     plot_output = output_path
                 print(f"\nGenerating {LATENCY_METRICS[metric]['label']} plot...")
-                plot_pareto_frontier(
-                    data, metric, str(plot_output), show, label_offsets_cfg.get(metric)
-                )
+                render_pareto(metric, Path(plot_output))
 
     if "range" in charts:
         # The range chart has a fixed basename; with a file-path output it

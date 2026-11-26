@@ -11,6 +11,6 @@
   "services": 25,
   "notes": [
     "Azure was measured against its eastus region, so its latency includes a cross-country round trip.",
-    "Each service ran with the default settings of its Pipecat integration."
+    "Each service ran with the default settings of its Pipecat integration, which Pipecat tunes together with each vendor."
   ]
 }

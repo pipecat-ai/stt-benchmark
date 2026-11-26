@@ -2,7 +2,7 @@
 
 ## Pareto Frontier Plot
 
-`pareto-frontier-plot.py` generates the README's latency/accuracy charts: scatter plots of TTFS latency vs Semantic WER with a Pareto frontier overlay, and a per-service latency distribution (median/P95/P99) chart.
+`pareto-frontier-plot.py` generates the README's latency/accuracy charts: scatter plots of TTFS latency vs Semantic WER on log axes with a Pareto frontier overlay, and a per-service latency distribution (median/P95/P99) chart.
 
 ### Usage
 
@@ -62,6 +62,26 @@ A JSON file that stores plot settings for repeatable generation. See `plot-confi
 | `label_offsets` | dict | Per-metric hand-placed label positions for dense regions, e.g. `{"median": {"Deepgram": [8, 2, "left"]}}` — `[dx, dy, alignment]` with offsets in points from the dot. Overrides the script's built-in defaults for that metric; labels not listed are placed automatically. |
 
 All keys are optional. Omitted keys fall back to defaults.
+
+## Results Snapshot
+
+`snapshot_results.py` records the README's current results as a dated snapshot under `results/`, so results can be compared over time. Run it after `stt-benchmark update-readme` and `pareto-frontier-plot.py`. It writes `results/<label>/summary.csv`, `run.json` and copies of the two charts, and rebuilds `results/history.csv` from every snapshot. Running it again with the same label replaces that snapshot.
+
+```bash
+uv run python scripts/snapshot_results.py 2026-11 \
+    --measured-from 2026-11-23 --measured-to 2026-11-26 \
+    --region us-west-2 --instance-type c7i.4xlarge
+```
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `label` | Snapshot name, such as `2026-11` | required |
+| `--measured-from`, `--measured-to` | First and last day of measurement (UTC) | required |
+| `--region` | Where the benchmark ran from | required |
+| `--instance-type` | Machine the benchmark ran on | none |
+| `--pipecat-version` | Pipecat version measured with | the one installed |
+| `--samples` | Samples per service | `1000` |
+| `--notes` | A caveat to record in `run.json`; repeatable | none |
 
 ## Judge Experiments
 

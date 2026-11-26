@@ -2,7 +2,7 @@
 
 ## Pareto Frontier Plot
 
-`pareto-frontier-plot.py` generates the README's latency/accuracy charts: scatter plots of TTFS latency vs Semantic WER on log axes with a Pareto frontier overlay, and a per-service latency distribution (median/P95/P99) chart.
+`pareto-frontier-plot.py` generates the README's latency/accuracy charts: scatter plots of TTFS latency vs Semantic WER with a Pareto frontier overlay, and a per-service latency distribution (median/P95/P99) chart.
 
 ### Usage
 
@@ -59,13 +59,14 @@ A JSON file that stores plot settings for repeatable generation. See `plot-confi
 | `latency` | string or list | Latency metrics for the Pareto charts: `"p95"` or `["median", "p95"]` |
 | `output` | string | Output file path or directory |
 | `show` | boolean | Display the plot interactively |
+| `corner` | `[ms, %]` or `null` | The fast, accurate corner that the median chart outlines and leaves unlabelled, and that a second chart, `stt_pareto_frontier_corner.png`, enlarges: services at or under this median TTFS and pooled WER. Default `[450, 1.6]`; `null` draws one chart with every service labelled. Hand-placed labels for the enlarged chart go under `median_corner` in `label_offsets`. |
 | `label_offsets` | dict | Per-metric hand-placed label positions for dense regions, e.g. `{"median": {"Deepgram": [8, 2, "left"]}}` — `[dx, dy, alignment]` with offsets in points from the dot. Overrides the script's built-in defaults for that metric; labels not listed are placed automatically. |
 
 All keys are optional. Omitted keys fall back to defaults.
 
 ## Results Snapshot
 
-`snapshot_results.py` records the README's current results as a dated snapshot under `results/`, so results can be compared over time. Run it after `stt-benchmark update-readme` and `pareto-frontier-plot.py`. It writes `results/<label>/summary.csv`, `run.json` and copies of the two charts, and rebuilds `results/history.csv` from every snapshot. Running it again with the same label replaces that snapshot.
+`snapshot_results.py` records the README's current results as a dated snapshot under `results/`, so results can be compared over time. Run it after `stt-benchmark update-readme` and `pareto-frontier-plot.py`. It writes `results/<label>/summary.csv`, `run.json` and copies of the charts, and rebuilds `results/history.csv` from every snapshot. Running it again with the same label replaces that snapshot.
 
 ```bash
 uv run python scripts/snapshot_results.py 2026-11 \

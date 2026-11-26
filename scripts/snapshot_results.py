@@ -5,7 +5,7 @@ The README shows the latest results. This copies them into ``results/<label>/``:
 
     summary.csv            one row per service, the README table's numbers
     run.json               how the results were measured
-    stt_pareto_frontier.png, stt_latency_range.png
+    stt_pareto_frontier.png, stt_pareto_frontier_corner.png, stt_latency_range.png
 
 and rewrites ``results/history.csv``, which holds every snapshot's rows in one
 file. Run it after ``stt-benchmark update-readme`` and
@@ -50,7 +50,7 @@ COLUMNS = {
     "ttfs_p95_ms": "ttfb_p95",
     "ttfs_p99_ms": "ttfb_p99",
 }
-PLOTS = ("stt_pareto_frontier.png", "stt_latency_range.png")
+PLOTS = ("stt_pareto_frontier.png", "stt_pareto_frontier_corner.png", "stt_latency_range.png")
 
 
 def judge_label() -> str:

@@ -22,48 +22,45 @@ Two services with the same median can therefore feel very different in an agent:
 
 ## Results Summary
 
-Benchmark results on 1000 samples from the `pipecat-ai/smart-turn-data-v3.1-train` dataset.
+Benchmark results on 1000 samples from the `pipecat-ai/smart-turn-data-v3.1-train` dataset. Every row was measured between 23 and 26 November 2026 from one AWS instance in `us-west-2`, on the same benchmark code and Pipecat version, and scored by the same judge. Earlier results are under [History](#history).
 
 <!-- RESULTS_TABLE:START -->
 | Vendor | Model | Transcripts | Perfect | WER Mean | Pooled WER | TTFS Median | TTFS P95 | TTFS P99 |
 |--------|-------|-------------|---------|----------|------------|-------------|----------|----------|
-| AssemblyAI | assemblyai-stt-3-7-realtime-agent | 99.9% | 91.4% | 0.61% | 0.52% | 260ms | 299ms | 321ms |
-| AssemblyAI | universal-3-5-pro | 99.9% | 86.0% | 1.12% | 0.95% | 282ms | 354ms | 393ms |
-| AssemblyAI | universal-3-6-pro | 99.9% | 88.7% | 0.89% | 0.80% | 307ms | 401ms | 498ms |
-| AssemblyAI | universal-streaming-english | 99.8% | 66.8% | 2.81% | 2.42% | 256ms | 362ms | 417ms |
-| AWS | N/A | 100.0% | 79.1% | 1.26% | 1.35% | 1136ms | 1527ms | 1897ms |
-| Azure | N/A | 100.0% | 83.5% | 0.98% | 1.01% | 1016ms | 1345ms | 1791ms |
-| Cartesia | ink-2 | 100.0% | 83.6% | 1.14% | 1.02% | 299ms | 328ms | 1584ms |
-| Cartesia | ink-whisper | 99.9% | 61.4% | 3.32% | 3.78% | 266ms | 364ms | 898ms |
-| Deepgram | nova-3-general | 99.8% | 77.7% | 1.32% | 1.37% | 247ms | 298ms | 326ms |
-| ElevenLabs | scribe_v2_realtime | 99.7% | 80.3% | 3.05% | 3.13% | 281ms | 348ms | 407ms |
-| Google | gemini-3.5-transcribe-live | 99.9% | 78.3% | 1.93% | 1.97% | 458ms | 532ms | 599ms |
-| Google | latest-long | 100.0% | 69.7% | 2.46% | 2.46% | 878ms | 1155ms | 1570ms |
-| Gradium | default | 99.3% | 65.6% | 3.81% | 3.79% | 585ms | 614ms | 623ms |
-| Meta | muse-voice-transcribe-1.0 | 99.9% | 89.5% | 0.80% | 0.73% | 392ms | 1292ms | 1922ms |
-| Mistral | voxtral-mini-transcribe-realtime-2602 | 99.3% | 67.7% | 4.49% | 5.11% | 525ms | 973ms | 1913ms |
-| NVIDIA | Nemotron 3.0 ASR (en) | 100.0% | 76.1% | 1.90%† | 1.95%† | 221ms | 238ms | 252ms |
-| NVIDIA | Nemotron 3.5 ASR (multilingual) | 99.6% | 62.0% | 4.54%† | 4.58%† | 236ms | 253ms | 266ms |
-| OpenAI | gpt-4o-transcribe | 99.3% | 75.7% | 3.10% | 2.95% | 637ms | 965ms | 1655ms |
-| OpenAI | gpt-realtime-whisper | 100.0% | 73.3% | 2.41% | 2.30% | 740ms | 878ms | 1080ms |
-| Rime | N/A | 100.0% | 82.5% | 1.25% | 1.21% | 323ms | 381ms | 415ms |
-| Smallest AI | pulse | 100.0% | 74.0% | 1.85% | 1.94% | 398ms | 533ms | 1593ms |
-| Soniox | stt-rt-v6 | 99.9% | 88.8% | 0.74% | 0.71% | 266ms | 324ms | 343ms |
-| Soniox | stt-rt-v4 | 99.8% | 83.2% | 1.04% | 1.13% | 249ms | 281ms | 310ms |
-| Soniox | stt-rt-v5 | 99.8% | 83.6% | 1.11% | 1.09% | 260ms | 305ms | 313ms |
-| Speechmatics | linden-1 | 99.5% | 83.9% | 1.11% | 0.96% | 369ms | 438ms | 690ms |
-| Speechmatics | N/A | 99.7% | 83.1% | 1.17% | 0.96% | 495ms | 676ms | 736ms |
-| xAI | grok-voice-transcribe-2.0 | 99.8% | 89.4% | 1.12% | 0.79% | 1322ms | 1895ms | 2148ms |
-| Zoom | zoom-scribe-en | 99.4% | 91.1% | 0.65% | 0.56% | 268ms | 368ms | 414ms |
-| Zoom | zoom-scribe-en-pro | 100.0% | 93.5% | 0.54% | 0.41% | 362ms | 572ms | 655ms |
-| Zoom | zoom-scribe-multilingual | 99.5% | 90.2% | 0.74% | 0.69% | 350ms | 526ms | 631ms |
+| AssemblyAI | assemblyai-stt-3-7-realtime-agent | 100.0% | 91.9% | 0.63% | 0.60% | 289ms | 412ms | 514ms |
+| AssemblyAI | universal-3-5-pro | 100.0% | 89.5% | 0.79% | 0.66% | 362ms | 547ms | 661ms |
+| AssemblyAI | universal-3-6-pro | 100.0% | 90.5% | 0.74% | 0.62% | 308ms | 399ms | 440ms |
+| AWS | N/A | 100.0% | 79.9% | 1.26% | 1.32% | 736ms | 1062ms | 1392ms |
+| Azure | N/A | 100.0% | 83.0% | 1.05% | 1.03% | 945ms | 1134ms | 1650ms |
+| Cartesia | ink-2 | 99.9% | 88.1% | 0.74% | 0.72% | 264ms | 285ms | 298ms |
+| Deepgram | nova-3-general | 100.0% | 79.2% | 1.35% | 1.35% | 289ms | 371ms | 420ms |
+| ElevenLabs | scribe_v2_realtime | 99.9% | 86.2% | 1.20% | 1.31% | 275ms | 292ms | 307ms |
+| Google | gemini-3.5-transcribe-live | 99.9% | 84.6% | 1.26% | 1.28% | 461ms | 533ms | 593ms |
+| Google | latest-long | 100.0% | 69.0% | 2.54% | 2.52% | 798ms | 946ms | 1246ms |
+| Gradium | default | 99.8% | 71.7% | 2.15% | 2.06% | 520ms | 532ms | 535ms |
+| Meta | muse-voice-transcribe-1.0 | 100.0% | 88.8% | 0.91% | 0.74% | 360ms | 1106ms | 1825ms |
+| Mistral | voxtral-mini-transcribe-realtime-2602 | 99.9% | 76.1% | 2.65% | 2.97% | 616ms | 783ms | 938ms |
+| OpenAI | gpt-4o-transcribe | 99.9% | 82.4% | 2.11% | 2.05% | 782ms | 1058ms | 1298ms |
+| OpenAI | gpt-realtime-whisper | 100.0% | 81.5% | 1.42% | 1.51% | 759ms | 934ms | 1097ms |
+| Rime | N/A | 99.9% | 85.1% | 1.09% | 1.10% | 257ms | 294ms | 333ms |
+| Smallest AI | pulse | 100.0% | 79.0% | 1.43% | 1.32% | 252ms | 732ms | 1090ms |
+| Soniox | stt-rt-v6 | 100.0% | 87.9% | 0.78% | 0.73% | 287ms | 350ms | 360ms |
+| Soniox | stt-rt-v4 | 100.0% | 85.0% | 1.02% | 1.00% | 280ms | 348ms | 360ms |
+| Soniox | stt-rt-v5 | 100.0% | 84.5% | 1.03% | 1.03% | 282ms | 346ms | 360ms |
+| Speechmatics | linden-1 | 99.9% | 85.4% | 0.99% | 0.84% | 345ms | 386ms | 404ms |
+| xAI | grok-voice-transcribe-2.0 | 99.8% | 90.7% | 0.83% | 0.58% | 1126ms | 1608ms | 1948ms |
+| Zoom | zoom-scribe-en | 100.0% | 92.2% | 0.56% | 0.48% | 305ms | 392ms | 436ms |
+| Zoom | zoom-scribe-en-pro | 99.9% | 93.4% | 0.57% | 0.43% | 391ms | 586ms | 675ms |
+| Zoom | zoom-scribe-multilingual | 99.9% | 88.9% | 0.78% | 0.71% | 375ms | 553ms | 637ms |
 <!-- RESULTS_TABLE:END -->
 
 Small WER differences aren't meaningful on this data. Among the most accurate services, differences of less than about 0.25 percentage points are within the 95% confidence interval from bootstrap resampling of the benchmark samples, so those services can't be reliably ranked against each other; the margin is wider for less accurate services.
 
-† Scored by the previous judge (Claude Sonnet 4.5), which reports WER about 15% higher on average than the current judge. These rows will be re-scored.
+Small latency differences aren't meaningful either. The same service measured in different sessions differed by about 10 ms in its median, so services within about 15 ms of each other can't be reliably ranked.
 
-> **Scoring update (September 2026):** Semantic WER is now judged by Claude Sonnet 5.5, replacing Claude Sonnet 4.5. Repeated words, stutters, and restarts in a transcription no longer count as errors, and a word split in two or merged with its neighbour counts as one error. WER fell for almost every service, by about 13% on average, mostly from fewer counted insertions; the Pareto frontier is unchanged. Earlier results are in the git history. See [Semantic WER](#semantic-wer) for how scoring works.
+Azure was measured against its `eastus` region from `us-west-2`, so its latency includes a cross-country round trip that a same-region deployment would not have.
+
+Each service runs with the settings its Pipecat integration uses by default. Several have settings that trade accuracy for latency, which these results don't explore.
 
 ### Latency vs Accuracy Trade-off
 
@@ -73,7 +70,9 @@ Small WER differences aren't meaningful on this data. Among the most accurate se
 
 The Pareto frontier shows services that offer the best trade-off between latency and accuracy—no other service is better on both metrics. Services on the frontier represent efficient choices depending on your priorities. They are drawn in green and joined by a line; a blue point is not on the frontier, however close it sits to one that is.
 
-Each point is a service's pooled WER. Points close together on the WER axis may not differ meaningfully; see the note under the [results table](#results-summary).
+Each point is a service's pooled WER. Points close together on either axis may not differ meaningfully; see the notes under the [results table](#results-summary).
+
+Both axes are logarithmic, so that the services in the fast, accurate corner can be told apart. Equal distances on the chart are equal ratios, not equal differences: read the values from the axis labels or the table.
 
 ### Latency Consistency
 
@@ -98,6 +97,18 @@ For production voice agents, **tail latency matters more than median**. Even occ
 > **Semantic WER** measures only transcription errors that would impact an LLM agent's understanding. Punctuation, contractions, filler words, and equivalent phrasings are ignored.
 
 > **TTFS (Time To Final Segment)** is measured from when the user stops speaking to when the last transcription segment for that turn is received: the moment the transcript is complete. Which percentile matters depends on the service; see [Reading TTFS](#what-this-benchmark-measures).
+
+### History
+
+The table and charts above are the latest results. Each full run is also kept as a dated snapshot under [`results/`](results/), so changes can be tracked over time:
+
+| Snapshot | Measured | From | Services |
+|----------|----------|------|----------|
+| [2026-11](results/2026-11/) | 23–26 November 2026 | AWS `us-west-2` | 25 |
+
+Each snapshot folder holds `summary.csv` (the table's numbers), `run.json` (region, Pipecat version, benchmark commit, judge and caveats), and the two charts. [`results/history.csv`](results/history.csv) holds every snapshot's rows in one file. Compare snapshots with their `run.json` in hand: a change in region, Pipecat version or judge moves the numbers on its own.
+
+Results published before the first snapshot were measured over several months, from more than one location and with two judges, so they are not kept as a snapshot; they remain in the git history. Five rows from that table were not carried over: AssemblyAI universal-streaming-english, Cartesia ink-whisper and the earlier Speechmatics model have been superseded, and the two NVIDIA Nemotron models run locally and were not re-measured.
 
 ## Contributing a Result
 

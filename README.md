@@ -60,7 +60,7 @@ Small latency differences aren't meaningful either. The same service measured in
 
 Azure was measured against its `eastus` region from `us-west-2`, so its latency includes a cross-country round trip that a same-region deployment would not have.
 
-Each service runs with the settings its Pipecat integration uses by default. Several have settings that trade accuracy for latency, which these results don't explore.
+Each service runs with its Pipecat integration's default settings, which Pipecat tunes together with each vendor. Other settings can trade accuracy for latency; these results don't explore them.
 
 ### Latency vs Accuracy Trade-off
 

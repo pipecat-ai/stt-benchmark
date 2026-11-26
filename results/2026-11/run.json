@@ -1,0 +1,16 @@
+{
+  "snapshot": "2026-11",
+  "measured_from": "2026-11-23",
+  "measured_to": "2026-11-26",
+  "region": "us-west-2",
+  "instance_type": "c7i.4xlarge",
+  "samples_per_service": 1000,
+  "pipecat_version": "1.17.0",
+  "benchmark_commit": "b4bda7089cf60e629a5fdbd0818484a1af00f499",
+  "judge": "claude-sonnet-5-5 effort=medium repeats=1 rev=d739a9b1",
+  "services": 25,
+  "notes": [
+    "Azure was measured against its eastus region, so its latency includes a cross-country round trip.",
+    "Each service ran with the default settings of its Pipecat integration."
+  ]
+}

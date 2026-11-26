@@ -46,24 +46,28 @@ RANGE_P99 = "#86b6ef"
 # config key.
 DEFAULT_LABEL_OFFSETS = {
     "median": {
-        "NVIDIA Nemotron 3.0 ASR (en)": (8, 6, "left"),
-        "Deepgram": (8, 2, "left"),
-        "Soniox stt-rt-v4": (-9, 4, "right"),
-        "Soniox stt-rt-v5": (-9, -12, "right"),
-        "Soniox stt-rt-v6": (-10, -10, "right"),
-        "Rime": (8, 7, "left"),
-        "AssemblyAI universal-3-5-pro": (27, 16, "left"),
-        "Cartesia ink-2": (44, 1, "left"),
-        "Speechmatics": (10, -2, "left"),
-        "Speechmatics linden-1": (10, -9, "left"),
-        "AssemblyAI universal-3-6-pro": (9, -14, "left"),
-        "Meta": (10, 3, "left"),
-        "AssemblyAI stt-3-7-realtime-agent": (16, -27, "left"),
-        "Zoom scribe-en": (10, -21.5, "left"),
+        "Smallest AI": (-8, 10, "right"),
+        "Rime": (-10, -4, "right"),
+        "Cartesia": (-10, -8, "right"),
+        "Deepgram": (8, 4, "left"),
+        "ElevenLabs": (8, -12, "left"),
+        "Soniox stt-rt-v4": (9, -9, "left"),
+        "Soniox stt-rt-v5": (9, 5, "left"),
+        "Soniox stt-rt-v6": (8, 8, "left"),
+        "AssemblyAI stt-3-7-realtime-agent": (-70, -75, "left"),
+        "AssemblyAI universal-3-5-pro": (10, -8, "left"),
+        "AssemblyAI universal-3-6-pro": (10, -10, "left"),
+        "Speechmatics": (8, 6, "left"),
+        "Meta": (-8, -12, "right"),
+        "Zoom scribe-en": (8, -12, "left"),
         "Zoom scribe-en-pro": (11, 0, "left"),
-        "Zoom scribe-multilingual": (14, -12.5, "left"),
+        "Zoom scribe-multilingual": (10, 4, "left"),
     },
 }
+
+# Round values the log axes may label; the ones inside a chart's limits are used.
+LATENCY_TICKS = (100, 150, 200, 250, 300, 400, 500, 700, 1000, 1500, 2000, 3000, 5000)
+WER_TICKS = (0.1, 0.2, 0.3, 0.4, 0.5, 0.7, 1, 1.5, 2, 3, 5, 7, 10, 15, 20)
 
 
 def find_pareto_optimal(names: list, ttfb_values: list, wer_values: list) -> list:
@@ -95,6 +99,7 @@ def plot_pareto_frontier(
         import matplotlib.pyplot as plt
         from adjustText import adjust_text
         from matplotlib.lines import Line2D
+        from matplotlib.ticker import FixedLocator, FuncFormatter, NullLocator
     except ImportError as e:
         if "adjustText" in str(e):
             print("adjustText is required for plotting. Install with: uv add adjustText")
@@ -201,12 +206,23 @@ def plot_pareto_frontier(
         else:
             texts.append(ax.text(ttfb, wer, name, fontsize=7.5, color=INK_2, zorder=6))
 
-    # Axis limits: pad around the data instead of forcing a zero origin,
-    # so dense regions keep their resolution.
-    x_range = max(ttfb_values) - min(ttfb_values) or max(ttfb_values) * 0.2 or 1
-    y_range = max(wer_values) - min(wer_values) or max(wer_values) * 0.2 or 1
-    ax.set_xlim(min(ttfb_values) - 0.08 * x_range, max(ttfb_values) + 0.10 * x_range)
-    ax.set_ylim(min(wer_values) - 0.08 * y_range, max(wer_values) + 0.12 * y_range)
+    # Log axes: most services sit in one corner, and a gap of 30 ms or 0.2
+    # points matters more there than among the slow or inaccurate ones.
+    # Limits pad around the data by a ratio, and the ticks are round values
+    # labelled in plain numbers.
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    x_low, x_high = min(ttfb_values) / 1.09, max(ttfb_values) * 1.15
+    y_low, y_high = min(wer_values) / 1.18, max(wer_values) * 1.2
+    ax.set_xlim(x_low, x_high)
+    ax.set_ylim(y_low, y_high)
+    for axis, ticks, low, high in (
+        (ax.xaxis, LATENCY_TICKS, x_low, x_high),
+        (ax.yaxis, WER_TICKS, y_low, y_high),
+    ):
+        axis.set_major_locator(FixedLocator([t for t in ticks if low <= t <= high]))
+        axis.set_minor_locator(NullLocator())
+        axis.set_major_formatter(FuncFormatter(lambda value, _: f"{value:g}"))
 
     # Recessive chrome: hairline grid, no top/right spines, muted ticks.
     ax.grid(True, color=GRID, linewidth=0.8, zorder=0)
@@ -217,8 +233,8 @@ def plot_pareto_frontier(
         ax.spines[side].set_color(MUTED)
     ax.tick_params(colors=INK_2, labelsize=10)
 
-    ax.set_xlabel(f"{ttfb_label} (ms) (lower is better)", fontsize=11, color=INK)
-    ax.set_ylabel("Semantic WER Pooled (%) (lower is better)", fontsize=11, color=INK)
+    ax.set_xlabel(f"{ttfb_label} (ms, log scale; lower is better)", fontsize=11, color=INK)
+    ax.set_ylabel("Semantic WER Pooled (%, log scale; lower is better)", fontsize=11, color=INK)
     ax.set_title(
         f"STT Pareto Frontier: {ttfb_label} Latency vs Accuracy",
         fontsize=13,

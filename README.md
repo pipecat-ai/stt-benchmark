@@ -68,11 +68,13 @@ Each service runs with the settings its Pipecat integration uses by default. Sev
 
 ![STT Service Pareto Frontier - Median](assets/stt_pareto_frontier.png)
 
-The Pareto frontier shows services that offer the best trade-off between latency and accuracy—no other service is better on both metrics. Services on the frontier represent efficient choices depending on your priorities. They are drawn in green and joined by a line; a blue point is not on the frontier, however close it sits to one that is.
+Most services sit in the fast, accurate corner, outlined above. The chart below enlarges it:
+
+![STT Service Pareto Frontier - Median, services at or under 450 ms and 1.6% WER](assets/stt_pareto_frontier_corner.png)
+
+The Pareto frontier shows services that offer the best trade-off between latency and accuracy—no other service is better on both metrics. Services on the frontier represent efficient choices depending on your priorities. They are drawn in green and joined by a line; a blue point is not on the frontier, however close it sits to one that is. The frontier is worked out over every service, so it is the same in both charts.
 
 Each point is a service's pooled WER. Points close together on either axis may not differ meaningfully; see the notes under the [results table](#results-summary).
-
-Both axes are logarithmic, so that the services in the fast, accurate corner can be told apart. Equal distances on the chart are equal ratios, not equal differences: read the values from the axis labels or the table.
 
 ### Latency Consistency
 
@@ -106,7 +108,7 @@ The table and charts above are the latest results. Each full run is also kept as
 |----------|----------|------|----------|
 | [2026-11](results/2026-11/) | 23–26 November 2026 | AWS `us-west-2` | 25 |
 
-Each snapshot folder holds `summary.csv` (the table's numbers), `run.json` (region, Pipecat version, benchmark commit, judge and caveats), and the two charts. [`results/history.csv`](results/history.csv) holds every snapshot's rows in one file. Compare snapshots with their `run.json` in hand: a change in region, Pipecat version or judge moves the numbers on its own.
+Each snapshot folder holds `summary.csv` (the table's numbers), `run.json` (region, Pipecat version, benchmark commit, judge and caveats), and the charts. [`results/history.csv`](results/history.csv) holds every snapshot's rows in one file. Compare snapshots with their `run.json` in hand: a change in region, Pipecat version or judge moves the numbers on its own.
 
 Results published before the first snapshot were measured over several months, from more than one location and with two judges, so they are not kept as a snapshot; they remain in the git history. Five rows from that table were not carried over: AssemblyAI universal-streaming-english, Cartesia ink-whisper and the earlier Speechmatics model have been superseded, and the two NVIDIA Nemotron models run locally and were not re-measured.
 
